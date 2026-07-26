@@ -1,0 +1,151 @@
+.driver {
+  margin: 24px 0;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.driver h1 {
+  font-size: 32px;
+}
+
+.driver header p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+}
+
+.total-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The hero figure — proportional numerals, since it stands alone. */
+.total-sim {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: normal;
+}
+
+.total-ci,
+.total-actual {
+  font-size: 12px;
+}
+
+.titles {
+  padding: 16px 18px;
+  margin-bottom: 24px;
+}
+
+.titles h2 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.titles p {
+  max-width: 60ch;
+  margin: 6px 0 0;
+  font-size: 13.5px;
+}
+
+.titles ul {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.titles li {
+  display: grid;
+  grid-template-columns: 34px 1fr 46px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.titles-n {
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.titles-track {
+  height: 8px;
+  background: var(--surface-sunken);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.titles-fill {
+  display: block;
+  height: 100%;
+  background: var(--series-sim);
+  border-radius: 4px;
+}
+
+.titles-p {
+  text-align: right;
+  color: var(--text-secondary);
+}
+
+.chart-metrics {
+  margin-top: 8px;
+}
+
+.driver-seasons {
+  width: 100%;
+  min-width: 620px;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.driver-seasons th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--axis);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.driver-seasons td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--grid);
+}
+
+.driver-seasons .num {
+  text-align: right;
+}
+
+.driver-seasons tbody tr:hover {
+  background: var(--surface-sunken);
+}

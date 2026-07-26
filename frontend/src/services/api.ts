@@ -5,6 +5,8 @@
 
 import type {
   ChampionOdds,
+  DriverDetail,
+  DriverRef,
   Health,
   LeaderBoard,
   LeaderQuery,
@@ -79,4 +81,12 @@ export function getLeaders(query: LeaderQuery): Promise<LeaderBoard> {
 
 export function getMeta(): Promise<Meta> {
   return get<Meta>('/meta')
+}
+
+export function getDriver(driverId: number): Promise<DriverDetail> {
+  return get<DriverDetail>(`/drivers/${driverId}`)
+}
+
+export function searchDrivers(q: string): Promise<DriverRef[]> {
+  return get<DriverRef[]>('/drivers/search', { q })
 }

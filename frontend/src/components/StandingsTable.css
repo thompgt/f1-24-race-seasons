@@ -153,3 +153,17 @@
     display: none;
   }
 }
+
+a.driver-name {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.driver-name:hover {
+  color: var(--series-sim);
+  text-decoration: underline;
+}
+
+.is-champion a.driver-name {
+  color: var(--series-sim);
+}

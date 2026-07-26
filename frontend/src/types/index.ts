@@ -192,3 +192,49 @@ export interface Meta {
   method: MethodStep[]
   caveats: Caveat[]
 }
+
+export interface DriverSeason {
+  year: number
+  constructor: ConstructorRef | null
+  races: number
+  actual_wins: number
+  actual_podiums: number
+  actual_poles: number
+  actual_points: number
+  scaled_wins: number
+  wins: SimStat
+  podiums: SimStat
+  poles: SimStat
+  points: SimStat
+  p_champion: number
+  is_actual_champion: boolean
+}
+
+export interface CareerTotals {
+  seasons: number
+  first_year: number
+  last_year: number
+  races: number
+  actual_wins: number
+  actual_podiums: number
+  actual_poles: number
+  actual_points: number
+  actual_championships: number
+  scaled_wins: number
+  scaled_podiums: number
+  scaled_poles: number
+  wins: SimStat
+  podiums: SimStat
+  poles: SimStat
+  points: SimStat
+  championships: SimStat
+  championships_at_least: Record<number, number>
+}
+
+export interface DriverDetail {
+  driver: DriverRef
+  dob: string | null
+  run: RunInfo
+  career: CareerTotals
+  seasons: DriverSeason[]
+}

@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
+import { renderWithRouter } from '../testUtils'
 import type { SeasonDriverRow } from '../types'
 import StandingsTable from './StandingsTable'
 
@@ -84,7 +85,7 @@ const rows = [
 ]
 
 function renderTable() {
-  return render(<StandingsTable rows={rows} seasonRaces={10} targetRaces={24} />)
+  return renderWithRouter(<StandingsTable rows={rows} seasonRaces={10} targetRaces={24} />)
 }
 
 describe('StandingsTable', () => {

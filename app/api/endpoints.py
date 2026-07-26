@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.schemas.common import RunInfo
+from app.schemas.common import DriverRef, RunInfo
+from app.schemas.driver import DriverDetail
 from app.schemas.historical import Basis, GroupBy, LeaderBoard, Metric
 from app.schemas.meta import Meta
 from app.schemas.season import ChampionOdds, SeasonDetail, SeasonSummary
-from app.services import historical_service, meta_service, season_service
+from app.services import driver_service, historical_service, meta_service, season_service
 
 router = APIRouter()
 
@@ -106,3 +107,25 @@ async def get_leaders(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/drivers/search", response_model=list[DriverRef])
+async def search_drivers(
+    q: str = Query(..., min_length=1, max_length=60),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    run: RunInfo = Depends(require_run),
+) -> list[DriverRef]:
+    return await driver_service.search_drivers(db, q, run, limit=limit)
+
+
+@router.get("/drivers/{driver_id}", response_model=DriverDetail)
+async def get_driver(
+    driver_id: int,
+    db: AsyncSession = Depends(get_db),
+    run: RunInfo = Depends(require_run),
+) -> DriverDetail:
+    driver = await driver_service.get_driver(db, driver_id, run)
+    if driver is None:
+        raise HTTPException(status_code=404, detail=f"No driver {driver_id}")
+    return driver

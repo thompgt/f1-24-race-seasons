@@ -1,0 +1,71 @@
+.dchart {
+  margin: 24px 0;
+}
+
+.dchart figcaption {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* A coloured mark beside the words, so the text itself stays in ink tokens. */
+.dchart-key::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.dchart-key.sim::before {
+  background: var(--series-sim);
+}
+
+.dchart-key.actual::before {
+  background: var(--series-actual);
+}
+
+.dchart svg {
+  width: 100%;
+  min-width: 460px;
+  height: auto;
+}
+
+.dchart-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.dchart-tick {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font);
+}
+
+.dchart-band {
+  fill: var(--series-sim-soft);
+  opacity: 0.55;
+}
+
+.dchart-median {
+  fill: none;
+  stroke: var(--series-sim);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.dchart-actual {
+  fill: none;
+  stroke: var(--series-actual);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  stroke-linejoin: round;
+}
+
+.dchart-dot {
+  fill: var(--series-sim);
+  /* A surface ring keeps overlapping marks separable. */
+  stroke: var(--surface-page);
+  stroke-width: 2;
+}

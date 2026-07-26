@@ -220,3 +220,44 @@ def test_meta_measures_its_caveats_from_the_data():
 
     assert len(meta["method"]) >= 4
     assert meta["run"]["n_iterations"] > 0
+
+
+# --- Drivers -----------------------------------------------------------------
+
+
+@requires_run
+def test_driver_search_finds_by_partial_name():
+    results = client.get("/api/drivers/search?q=fangio").json()
+    assert [r["name"] for r in results] == ["Juan Fangio"]
+
+
+@requires_run
+def test_driver_detail_carries_career_and_seasons():
+    driver_id = client.get("/api/drivers/search?q=fangio").json()[0]["driver_id"]
+    driver = client.get(f"/api/drivers/{driver_id}").json()
+
+    career = driver["career"]
+    assert career["actual_wins"] == 24
+    assert career["actual_championships"] == 5
+    assert career["wins"]["median"] > career["actual_wins"]
+
+    years = [s["year"] for s in driver["seasons"]]
+    assert years == sorted(years)
+    assert any(s["is_actual_champion"] for s in driver["seasons"])
+
+
+@requires_run
+def test_career_title_odds_are_a_distribution_not_a_point():
+    """The number that summed per-season probabilities cannot produce."""
+    driver_id = client.get("/api/drivers/search?q=fangio").json()[0]["driver_id"]
+    odds = client.get(f"/api/drivers/{driver_id}").json()["career"]["championships_at_least"]
+
+    values = [odds[str(n)] for n in range(1, 11)]
+    assert values == sorted(values, reverse=True)
+    assert odds["1"] > 0.9
+    assert 0 < odds["5"] < 1
+
+
+@requires_run
+def test_unknown_driver_returns_404():
+    assert client.get("/api/drivers/999999").status_code == 404

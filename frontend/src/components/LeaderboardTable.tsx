@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import ConfidenceBar from './ConfidenceBar'
 import SimStatCell from './SimStatCell'
 import type { Basis, LeaderBoard } from '../types'
@@ -69,7 +71,13 @@ export default function LeaderboardTable({ board }: Props) {
                 <RankDelta delta={row.rank_delta ?? null} />
               </td>
               <td>
-                <span className="leader-name">{row.label}</span>
+                {isGroup ? (
+                  <span className="leader-name">{row.label}</span>
+                ) : (
+                  <Link className="leader-name" to={`/drivers/${row.key}`}>
+                    {row.label}
+                  </Link>
+                )}
                 {row.sublabel && <span className="leader-sub muted">{row.sublabel}</span>}
                 {row.rank_actual !== null && row.rank_delta !== null && row.rank_delta !== 0 && (
                   <span className="leader-was muted">

@@ -77,3 +77,13 @@
     display: none;
   }
 }
+
+a.leader-name {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.leader-name:hover {
+  color: var(--series-sim);
+  text-decoration: underline;
+}

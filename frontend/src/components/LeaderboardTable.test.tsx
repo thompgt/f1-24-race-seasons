@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { renderWithRouter } from '../testUtils'
 import type { LeaderBoard, LeaderRow } from '../types'
 import LeaderboardTable from './LeaderboardTable'
 
@@ -51,7 +52,7 @@ function board(rows: LeaderRow[]): LeaderBoard {
 
 describe('LeaderboardTable', () => {
   it('shows a climb with an up arrow and the previous rank', () => {
-    render(
+    renderWithRouter(
       <LeaderboardTable board={board([leaderRow(3, 'Juan Fangio', 24, 83, 12)])} />,
     )
     const row = screen.getByText('Juan Fangio').closest('tr')!
@@ -60,7 +61,7 @@ describe('LeaderboardTable', () => {
   })
 
   it('shows a fall with a down arrow', () => {
-    render(
+    renderWithRouter(
       <LeaderboardTable board={board([leaderRow(5, 'Max Verstappen', 71, 77, 3)])} />,
     )
     const row = screen.getByText('Max Verstappen').closest('tr')!
@@ -68,21 +69,21 @@ describe('LeaderboardTable', () => {
   })
 
   it('marks an unmoved entry without an arrow', () => {
-    render(<LeaderboardTable board={board([leaderRow(1, 'Lewis Hamilton', 105, 131, 1)])} />)
+    renderWithRouter(<LeaderboardTable board={board([leaderRow(1, 'Lewis Hamilton', 105, 131, 1)])} />)
     const row = screen.getByText('Lewis Hamilton').closest('tr')!
     expect(within(row).queryByText(/▲|▼/)).toBeNull()
     expect(within(row).queryByText(/was #/)).toBeNull()
   })
 
   it('renders a dash when the metric has no unadjusted baseline', () => {
-    render(<LeaderboardTable board={board([leaderRow(1, 'Ferrari', 0, 19, null)])} />)
+    renderWithRouter(<LeaderboardTable board={board([leaderRow(1, 'Ferrari', 0, 19, null)])} />)
     const row = screen.getByText('Ferrari').closest('tr')!
     const move = within(row).getAllByRole('cell')[1]
     expect(move).toHaveTextContent('—')
   })
 
   it('shows all three bases per row', () => {
-    render(<LeaderboardTable board={board([leaderRow(3, 'Juan Fangio', 24, 83, 12)])} />)
+    renderWithRouter(<LeaderboardTable board={board([leaderRow(3, 'Juan Fangio', 24, 83, 12)])} />)
     const cells = within(screen.getByText('Juan Fangio').closest('tr')!).getAllByRole('cell')
     expect(cells[3]).toHaveTextContent('24')
     expect(cells[4]).toHaveTextContent('83')

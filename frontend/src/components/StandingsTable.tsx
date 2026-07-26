@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import type { Metric, SeasonDriverRow } from '../types'
 import ConfidenceBar from './ConfidenceBar'
@@ -98,7 +99,9 @@ export default function StandingsTable({ rows, seasonRaces, targetRaces }: Props
               >
                 <td className="col-rank muted tabular">{index + 1}</td>
                 <td>
-                  <span className="driver-name">{row.driver.name}</span>
+                  <Link className="driver-name" to={`/drivers/${row.driver.driver_id}`}>
+                    {row.driver.name}
+                  </Link>
                   {row.is_actual_champion && (
                     <span className="badge badge-champion" title="Actual world champion">
                       champion
