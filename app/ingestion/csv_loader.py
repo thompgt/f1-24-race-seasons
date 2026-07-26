@@ -14,7 +14,10 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+
+from app.sim import scoring
 
 logger = logging.getLogger(__name__)
 
@@ -88,20 +91,49 @@ def _collapse_car_swaps(results: pd.DataFrame) -> pd.DataFrame:
     return results
 
 
-def _mark_shared_drives(results: pd.DataFrame) -> pd.DataFrame:
+def _mark_shared_drives(results: pd.DataFrame, races: pd.DataFrame) -> pd.DataFrame:
     """Flag co-drivers of a shared car so each position is credited once.
 
     Two drivers sharing one car are both classified in the same position, which
-    would otherwise award two wins for a single race. The lowest-`resultId` row
-    in each (race, position) group is treated as canonical; the rest score
-    nothing. This affects 3 wins and 18 podiums across 1,125 races and is
-    disclosed through /api/meta.
+    would otherwise award two wins for a single race. One of them has to be
+    treated as canonical, and picking arbitrarily gets famous results wrong:
+    source order credits Fagioli rather than Fangio with the 1951 French GP,
+    leaving Fangio on 22 career wins instead of his actual 24.
+
+    The tiebreak is therefore the driver's strength that season, measured as
+    modern points from their unshared results. That recovers the historically
+    credited driver in every shared win — Fangio in 1951 and 1956, Moss in 1957 —
+    without hardcoding any names. Co-drivers lose the shared result, which is a
+    deviation from the official record (where both are credited) forced by the
+    requirement that a race have exactly one winner.
     """
     results = results.sort_values("resultId").copy()
     classified = results["position"].notna()
-    dupe_rank = results[classified].groupby(["raceId", "position"]).cumcount()
+
+    # Rough per-season strength, computed from every row so it does not depend on
+    # the flag being derived here.
+    year_by_race = races.set_index("raceId")["year"]
+    strength = (
+        results.assign(
+            year=results["raceId"].map(year_by_race),
+            _pts=scoring.race_points(results["position"].fillna(0).to_numpy(dtype=np.intp)),
+        )
+        .groupby(["year", "driverId"])["_pts"]
+        .sum()
+    )
+    results["_strength"] = pd.MultiIndex.from_arrays(
+        [results["raceId"].map(year_by_race), results["driverId"]]
+    ).map(strength).fillna(0.0)
+
+    ordered = results[classified].sort_values(
+        ["raceId", "position", "_strength", "resultId"], ascending=[True, True, False, True]
+    )
+    dupe_rank = ordered.groupby(["raceId", "position"]).cumcount()
+
     results["is_shared_secondary"] = False
-    results.loc[classified, "is_shared_secondary"] = dupe_rank > 0
+    results.loc[dupe_rank.index, "is_shared_secondary"] = dupe_rank > 0
+    results = results.drop(columns="_strength")
+
     logger.info(
         "Flagged %d shared-drive co-driver rows",
         int(results["is_shared_secondary"].sum()),
@@ -132,6 +164,24 @@ def _derive_poles(races: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
     return races
 
 
+def _actual_champions(csv_dir: Path, races: pd.DataFrame) -> pd.Series:
+    """The real title winner per season, from the final round's standings.
+
+    Taken from Ergast's own standings rather than recomputed, so it reflects the
+    rules actually in force that year — including the "best N results count"
+    rules this project otherwise ignores. Indexed by year.
+    """
+    standings = _read(csv_dir, "driver_standings")
+    final_round = races.loc[races.groupby("year")["round"].idxmax(), ["raceId", "year"]]
+    leaders = standings[standings["position"] == 1]
+    merged = final_round.merge(leaders, on="raceId", how="left")
+    champions = merged.set_index("year")["driverId"]
+    missing = int(champions.isna().sum())
+    if missing:
+        logger.warning("%d seasons have no champion in driver_standings.csv", missing)
+    return champions
+
+
 def load_source_frames(csv_dir: Path) -> SourceFrames:
     """Read the dump and reshape it into the source-table column layout."""
     raw_races = _read(csv_dir, "races")
@@ -146,7 +196,7 @@ def load_source_frames(csv_dir: Path) -> SourceFrames:
     races = _derive_poles(races, raw_results)
     races["has_sprint"] = raw_races["sprint_date"].notna()
 
-    results = _mark_shared_drives(_collapse_car_swaps(raw_results))
+    results = _mark_shared_drives(_collapse_car_swaps(raw_results), raw_races)
 
     # Season totals count only races that survive exclusion.
     counted = races[~races["excluded"]]
@@ -158,8 +208,20 @@ def load_source_frames(csv_dir: Path) -> SourceFrames:
     seasons["n_sprints"] = seasons["n_sprints"].astype(int)
     seasons["is_complete"] = True
     seasons["source"] = "ergast_csv"
+    seasons["actual_champion_driver_id"] = (
+        seasons["year"].map(_actual_champions(csv_dir, raw_races)).astype("Int64")
+    )
 
-    classified = results["position"].notna() & ~results["is_shared_secondary"]
+    # Score off the numeric finishing position, never off positionOrder — that is
+    # a dense rank including retirements, and using it awards points to 338
+    # retired, withdrawn and disqualified entries.
+    scorable = results["position"].notna() & ~results["is_shared_secondary"]
+    positions = np.where(scorable, results["position"].fillna(0), 0).astype(np.intp)
+    set_fl = (results["rank"] == 1).fillna(False).to_numpy(dtype=bool)
+
+    base_points = scoring.race_points(positions)
+    fl_points = scoring.fastest_lap_points(positions, set_fl)
+
     race_results = pd.DataFrame(
         {
             "race_id": results["raceId"],
@@ -169,14 +231,12 @@ def load_source_frames(csv_dir: Path) -> SourceFrames:
             "position": results["position"].astype("Int64"),
             "position_text": results["positionText"].astype(str),
             "position_order": results["positionOrder"].astype("Int64"),
-            "set_fastest_lap": (results["rank"] == 1).fillna(False),
+            "set_fastest_lap": set_fl,
             "is_shared_secondary": results["is_shared_secondary"],
-            # Points are materialised in a later step, once the modern scale is
-            # applied; see `app.sim.scoring`.
-            "points": 0.0,
-            "points_no_fl": 0.0,
-            "is_win": classified & (results["position"] == 1),
-            "is_podium": classified & (results["position"] <= 3),
+            "points": base_points + fl_points,
+            "points_no_fl": base_points,
+            "is_win": scoring.is_win(positions),
+            "is_podium": scoring.is_podium(positions),
         }
     )
 

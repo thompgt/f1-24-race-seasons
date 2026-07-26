@@ -27,6 +27,10 @@ class Season(Base):
     is_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     source: Mapped[str] = mapped_column(String, nullable=False)  # ergast_csv | jolpica
 
+    #: Who actually won the title, under the rules of the day — the baseline the
+    #: simulated champion is compared against.
+    actual_champion_driver_id: Mapped[int | None] = mapped_column(Integer)
+
 
 class Driver(Base):
     __tablename__ = "drivers"

@@ -172,3 +172,72 @@ def test_known_win_totals_match_the_real_record(db):
     assert wins["hamilton"] == 105
     assert wins["michael_schumacher"] == 91
     assert wins["max_verstappen"] == 63
+
+
+def test_shared_drive_wins_go_to_the_historically_credited_driver(db):
+    """Fangio's 24 wins include two he took over mid-race in a teammate's car.
+
+    Breaking the tie on source order instead of season strength leaves him on 22
+    and hands the 1951 French GP to Fagioli.
+    """
+    totals = dict(
+        db.exec_driver_sql(
+            """
+            SELECT d.driver_ref, SUM(rr.is_win)
+            FROM race_results rr
+            JOIN drivers d ON d.driver_id = rr.driver_id
+            JOIN races r ON r.race_id = rr.race_id
+            WHERE r.excluded = 0 AND d.driver_ref IN ('fangio', 'moss', 'ascari')
+            GROUP BY d.driver_ref
+            """
+        ).all()
+    )
+    assert totals == {"fangio": 24, "moss": 16, "ascari": 13}
+
+
+def test_known_podium_totals_match_the_real_record(db):
+    podiums = dict(
+        db.exec_driver_sql(
+            """
+            SELECT d.driver_ref, SUM(rr.is_podium)
+            FROM race_results rr
+            JOIN drivers d ON d.driver_id = rr.driver_id
+            JOIN races r ON r.race_id = rr.race_id
+            WHERE r.excluded = 0
+              AND d.driver_ref IN ('hamilton', 'michael_schumacher', 'fangio', 'moss')
+            GROUP BY d.driver_ref
+            """
+        ).all()
+    )
+    assert podiums == {
+        "hamilton": 202,
+        "michael_schumacher": 155,
+        "fangio": 35,
+        "moss": 24,
+    }
+
+
+def test_every_season_has_an_actual_champion(db):
+    missing = scalar(
+        db, "SELECT COUNT(*) FROM seasons WHERE actual_champion_driver_id IS NULL"
+    )
+    assert missing == 0
+
+
+def test_actual_champions_are_the_real_ones(db):
+    champions = dict(
+        db.exec_driver_sql(
+            """
+            SELECT s.year, d.driver_ref
+            FROM seasons s JOIN drivers d ON d.driver_id = s.actual_champion_driver_id
+            WHERE s.year IN (1950, 1988, 2008, 2021, 2024)
+            """
+        ).all()
+    )
+    assert champions == {
+        1950: "farina",
+        1988: "senna",
+        2008: "hamilton",
+        2021: "max_verstappen",
+        2024: "max_verstappen",
+    }
