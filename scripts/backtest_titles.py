@@ -224,10 +224,16 @@ def report(label: str, records: list[dict]) -> None:
 #: also why the per-race calibration in `calibrate_form.py` cannot find this on
 #: its own — it scores each pair separately, and so is blind to exactly the
 #: correlation across races that decides a championship.
+#:
+#: Volatility runs past 1.0 deliberately. An earlier grid stopped at 1.0 and the
+#: optimum landed exactly on that edge in the main fit *and* in both split-half
+#: folds, which says nothing about where the optimum is — only that the grid was
+#: too narrow to contain it. The deviation is clipped to `FormDynamics.band`
+#: anyway, so the upper values saturate rather than diverge.
 SEARCH_GRID = tuple(
     FormDynamics(persistence=p, volatility=v, momentum=m)
     for p in (0.7, 0.9, 1.0)
-    for v in (0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0)
+    for v in (0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0)
     for m in (0.0, 0.5, 1.0)
 )
 
