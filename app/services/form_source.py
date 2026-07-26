@@ -39,11 +39,11 @@ _RESULTS = text(
 
 _SPRINT_POINTS = text(
     """
-    SELECT sr.driver_id, SUM(sr.points) AS points
+    SELECT sr.race_id, sr.driver_id, SUM(sr.points) AS points
     FROM sprint_results sr
     JOIN races r ON r.race_id = sr.race_id
     WHERE r.year = :year AND r.excluded = 0
-    GROUP BY sr.driver_id
+    GROUP BY sr.race_id, sr.driver_id
     """
 )
 
@@ -55,15 +55,29 @@ def load_season_form(
     half_life: float | None = None,
     rng: np.random.Generator | None = None,
     ensemble: int = DEFAULT_ENSEMBLE,
+    through_race: int | None = None,
 ) -> SeasonForm:
-    """Assemble one season's banked totals and fitted end-of-season form."""
+    """Assemble one season's banked totals and fitted end-of-season form.
+
+    `through_race` truncates the season to its first N rounds, so the form is
+    fitted and the points banked as if the calendar had stopped there. Nothing
+    in production uses it — the continuation always runs from a complete
+    season — but it is what lets `scripts/backtest_titles.py` ask the model for
+    odds on a title race whose answer is already known.
+    """
     races = conn.execute(_RACES, {"year": year}).all()
+    if through_race is not None:
+        races = races[:through_race]
     if not races:
         raise ValueError(f"No races found for {year}")
     race_order = {int(row.race_id): i for i, row in enumerate(races)}
     n_races = len(races)
 
-    results = conn.execute(_RESULTS, {"year": year}).all()
+    results = [
+        row
+        for row in conn.execute(_RESULTS, {"year": year}).all()
+        if int(row.race_id) in race_order
+    ]
     if not results:
         raise ValueError(f"No results found for {year}")
 
@@ -101,8 +115,10 @@ def load_season_form(
         else:
             finishers[slot].append((int(row.position), driver))
 
-    for driver_id, sprint in conn.execute(_SPRINT_POINTS, {"year": year}).all():
-        if int(driver_id) in index:
+    for race_id, driver_id, sprint in conn.execute(_SPRINT_POINTS, {"year": year}).all():
+        # Truncated by the same race list as the main results, or a backtest cut
+        # short of a sprint round would bank points from a race it never saw.
+        if int(driver_id) in index and int(race_id) in race_order:
             points[index[int(driver_id)]] += sprint or 0.0
 
     orderings = []
