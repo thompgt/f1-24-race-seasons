@@ -9,8 +9,9 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.common import RunInfo
 from app.schemas.historical import Basis, GroupBy, LeaderBoard, Metric
+from app.schemas.meta import Meta
 from app.schemas.season import ChampionOdds, SeasonDetail, SeasonSummary
-from app.services import historical_service, season_service
+from app.services import historical_service, meta_service, season_service
 
 router = APIRouter()
 
@@ -32,6 +33,13 @@ async def require_run(db: AsyncSession = Depends(get_db)) -> RunInfo:
 @router.get("/health")
 async def health() -> dict[str, object]:
     return {"status": "ok", "database_present": settings.db_path.exists()}
+
+
+@router.get("/meta", response_model=Meta)
+async def get_meta(
+    db: AsyncSession = Depends(get_db), run: RunInfo = Depends(require_run)
+) -> Meta:
+    return await meta_service.build_meta(db, run)
 
 
 @router.get("/seasons", response_model=list[SeasonSummary])

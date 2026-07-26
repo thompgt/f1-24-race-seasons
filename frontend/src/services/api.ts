@@ -8,6 +8,7 @@ import type {
   Health,
   LeaderBoard,
   LeaderQuery,
+  Meta,
   SeasonDetail,
   SeasonSummary,
 } from '../types'
@@ -74,4 +75,8 @@ export function getChampionOdds(year: number): Promise<ChampionOdds[]> {
 
 export function getLeaders(query: LeaderQuery): Promise<LeaderBoard> {
   return get<LeaderBoard>('/historical/leaders', { ...query })
+}
+
+export function getMeta(): Promise<Meta> {
+  return get<Meta>('/meta')
 }

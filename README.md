@@ -15,9 +15,29 @@ leaderboards from those simulations.
   the simulated median with a 95% confidence interval, plus each driver's
   probability of taking the title.
 - **Historical Stats tab** — all-time leaders for wins, podiums, poles, points
-  and championships, re-derived from the simulations. Group by driver,
-  constructor, driver nationality, constructor nationality, decade or era. The
-  headline column is rank movement against the real leaderboard.
+  and championships, re-derived from the simulations. Group by driver, team,
+  driver nationality or team nationality, filter by era and career length, and
+  rank by any of the three bases. The headline column is rank movement against
+  the real leaderboard.
+- **Method tab** — how the normalisation works and what it does not account for,
+  served from the API so it cannot drift from the pipeline.
+
+### Some of what falls out
+
+Normalised to 24 races per season, on all-time wins:
+
+| | Driver | Actual | Simulated (95% CI) |
+|---|---|---|---|
+| 1 (–) | Michael Schumacher | 91 | 129 (113–145) |
+| 2 (–) | Lewis Hamilton | 105 | 129 (113–145) |
+| **3 (▲9)** | **Juan Fangio** | **24** | **83 (71–95)** |
+| 4 (▲1) | Alain Prost | 51 | 77 (63–91) |
+| 5 (▼2) | Max Verstappen | 71 | 77 (65–89) |
+
+Fangio rises from 12th to 3rd on wins and 10th to 2nd on poles. Nine seasons
+change champion, and eight of those change on the modern points system alone,
+before any normalisation — 1988, where Prost outscored Senna but lost on
+drop-scores, is the clearest.
 
 ## Method
 

@@ -198,3 +198,25 @@ def test_an_inverted_year_range_is_rejected():
 
 def test_unknown_metric_is_rejected():
     assert client.get("/api/historical/leaders?metric=fastest_pitstops").status_code == 422
+
+
+# --- Methodology -------------------------------------------------------------
+
+
+@requires_run
+def test_meta_measures_its_caveats_from_the_data():
+    """Caveats are served rather than written into the page, so they cannot drift."""
+    meta = client.get("/api/meta").json()
+
+    assert meta["first_year"] == 1950
+    assert meta["target_races"] == 24
+    assert meta["shortest_season_races"] < meta["longest_season_races"]
+
+    keys = {c["key"] for c in meta["caveats"]}
+    assert {"fastest_lap", "poles_from_grid", "indianapolis", "shared_drives"} <= keys
+
+    indy = next(c for c in meta["caveats"] if c["key"] == "indianapolis")
+    assert "11 races" in indy["title"]
+
+    assert len(meta["method"]) >= 4
+    assert meta["run"]["n_iterations"] > 0

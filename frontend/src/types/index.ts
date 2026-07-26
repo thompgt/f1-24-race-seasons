@@ -167,3 +167,28 @@ export interface LeaderQuery {
   year_to?: number
   limit?: number
 }
+
+export interface MethodStep {
+  title: string
+  detail: string
+}
+
+export interface Caveat {
+  key: string
+  title: string
+  detail: string
+}
+
+export interface Meta {
+  run: RunInfo
+  first_year: number
+  last_year: number
+  target_races: number
+  shortest_season_year: number
+  shortest_season_races: number
+  longest_season_year: number
+  longest_season_races: number
+  data_sources: string[]
+  method: MethodStep[]
+  caveats: Caveat[]
+}
