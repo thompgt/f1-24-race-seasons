@@ -251,6 +251,126 @@ def fit_strength_ensemble(
     return np.vstack(rows)
 
 
+@dataclass(frozen=True)
+class FormDynamics:
+    """How a driver's pace moves from one simulated race to the next.
+
+    Holding strength fixed across the whole continuation says that whoever was
+    quickest at the end of the season stays exactly that quick for every
+    remaining race. That is the assumption which makes a points lead close to
+    unassailable: with pace frozen, the only thing left to vary is race noise,
+    and eight races of race noise are not enough to overturn seventy points. It
+    is also plainly false — 1989 fits Senna *faster* than Prost and still gives
+    him one title in 250, because his form is never allowed to turn into a run.
+
+    So pace is carried as a state instead. Each driver has a deviation from
+    their fitted anchor which evolves race by race:
+
+        dev <- persistence x dev  +  momentum x surprise  +  volatility x noise
+
+    and their strength for the next race is `anchor x exp(dev)`.
+
+    The three terms are three distinct claims, each separately calibrated in
+    `scripts/calibrate_form.py` against the real history rather than assumed:
+
+    - `volatility` — pace genuinely wanders. Cars are developed, tracks suit
+      different machinery, and a fit from sixteen races does not pin next
+      Sunday to a point.
+    - `persistence` — that wandering is correlated. Being quick in Belgium says
+      more about Italy than about a race half a season away, which is the same
+      observation that motivates the recency-weighted fit, applied forwards.
+    - `momentum` — a result better than a driver's own norm feeds back into
+      their next race. This is the only term that is a substantive claim about
+      streaks rather than about uncertainty, and it is the one the calibration
+      is most sceptical of: it is measured as the residual predictive power of
+      recent over-performance *after* fitted strength is accounted for.
+
+    Together they mean the extra races are not eight draws from one fixed
+    distribution but a sequence in which the odds move — a chaser can find a
+    run, and a leader can lose one. Reversion is what keeps that honest: a
+    purple patch decays back towards the anchor rather than compounding without
+    limit, so the model finds drama where the season left room for it and not
+    otherwise.
+    """
+
+    #: Fraction of a form deviation carried into the next race. 0 forgets each
+    #: race, 1 makes a deviation permanent.
+    persistence: float = 0.0
+    #: Standard deviation of the per-race innovation, in log-strength.
+    volatility: float = 0.0
+    #: Sensitivity to beating one's own expected result. In log-strength per
+    #: unit of beat-fraction surprise, which ranges over [-1, 1].
+    momentum: float = 0.0
+    #: Hard cap on |dev|, in log-strength. Guards against a compounding streak
+    #: running away in the tail of ten thousand iterations; at the calibrated
+    #: settings it binds on well under one draw in a thousand.
+    band: float = 2.5
+
+    @property
+    def is_static(self) -> bool:
+        """True when this reduces to holding strength fixed all the way."""
+        return self.volatility == 0.0 and self.momentum == 0.0
+
+
+#: Pace frozen at the fitted anchor — the behaviour before form was modelled as
+#: a state. Kept as a named baseline so tests and the calibration can measure
+#: against it.
+STATIC_FORM = FormDynamics()
+
+
+def expected_beat_fraction(
+    strength: np.ndarray, entry_rate: np.ndarray | None = None
+) -> np.ndarray:
+    """Each driver's expected share of rivals beaten, per strength row.
+
+    Under Plackett-Luce the probability that i finishes ahead of j is
+    `s_i / (s_i + s_j)`, so averaging over rivals gives the fraction of the
+    field a driver should expect to beat. That is the reference the momentum
+    term measures surprise against: doing better than *this* is a driver
+    exceeding their own norm, not merely being quick.
+
+    Rivals are weighted by `entry_rate` because the observed beat-fraction is
+    taken over the drivers who actually entered. Averaging the expectation over
+    the whole season's entry list instead would hold every regular to a
+    standard set partly by part-timers who are rarely on the grid, and so hand
+    the midfield a standing negative surprise.
+
+    Returns (B, D) for a (B, D) input, or (D,) for (D,).
+    """
+    flat = np.atleast_2d(strength).astype(np.float64)
+    rows, n_drivers = flat.shape
+    if n_drivers < 2:
+        result = np.zeros_like(flat)
+        return result if strength.ndim > 1 else result[0]
+
+    weights = (
+        np.ones(n_drivers)
+        if entry_rate is None
+        else np.asarray(entry_rate, dtype=np.float64)
+    )
+
+    safe = np.maximum(flat, 1e-12)
+    # pairwise[b, i, j] = P(i beats j). The diagonal is a self-comparison at
+    # exactly 0.5 and is subtracted back out rather than masked, which keeps
+    # this to one broadcast instead of a per-driver loop.
+    pairwise = safe[:, :, None] / (safe[:, :, None] + safe[:, None, :])
+    totals = (pairwise * weights[None, None, :]).sum(axis=2) - 0.5 * weights[None, :]
+    divisor = np.maximum(weights.sum() - weights, 1e-12)
+
+    result = totals / divisor[None, :]
+    return result if strength.ndim > 1 else result[0]
+
+
+def _draw_rows(
+    values: np.ndarray, picks: np.ndarray, n_drivers: int
+) -> np.ndarray:
+    """Expand a (D,) constant or a (B, D) ensemble to one row per iteration."""
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim == 1:
+        return np.broadcast_to(array, (len(picks), n_drivers))
+    return array[picks]
+
+
 def simulate_continuation(
     form: SeasonForm,
     *,
@@ -258,11 +378,20 @@ def simulate_continuation(
     n_iterations: int,
     target_races: int,
     points_table: tuple[int, ...] = MODERN_POINTS,
+    dynamics: FormDynamics = STATIC_FORM,
 ) -> dict[str, np.ndarray]:
     """Race out the remainder of a season, `n_iterations` times.
 
-    Returns per-iteration totals: `points`, `wins` and `podiums`, each (N, D) and
-    inclusive of what was already banked, plus `extra_races`.
+    Returns per-iteration totals: `points`, `wins` and `podiums`, each (N, D)
+    and inclusive of what was already banked, plus `extra_races` and
+    `lead_share` — the fraction of iterations each driver leads the standings
+    after each extra race, which is the race-by-race path of the title fight
+    rather than only its endpoint.
+
+    The extra races are run one at a time, in order, because `dynamics` makes
+    each one depend on the last: form is a state that the previous result
+    updates. With the default `STATIC_FORM` the state never moves and this
+    reduces to sampling every remaining race from one fixed set of strengths.
 
     A season that already ran the full distance has nothing left to race, so
     every iteration returns exactly what happened. That is not a defect of the
@@ -283,45 +412,108 @@ def simulate_continuation(
             "wins": wins,
             "podiums": podiums,
             "extra_races": np.full(n_iterations, extra),
+            "lead_share": _lead_share(points, wins, podiums)[None, :],
         }
 
-    shape = (n_iterations, extra)
-    entered = rng.random(shape + (n_drivers,)) < form.entry_rate
-    finished = entered & (rng.random(shape + (n_drivers,)) >= form.dnf_rate)
-
-    # One strength row per simulated championship, so a season is raced out
-    # under a single coherent view of who was quick rather than a fresh one each
-    # race — the estimate is uncertain, not unstable.
+    # One row per simulated championship, so a season is raced out under a
+    # single coherent view of who was quick rather than a fresh one each race —
+    # the estimate is uncertain, not unstable. Reliability and entry are drawn
+    # on the same index as strength where they are given as ensembles, so an
+    # iteration sees one self-consistent version of the season.
     ensemble = np.atleast_2d(form.strength)
-    drawn = ensemble[rng.integers(0, len(ensemble), size=n_iterations)]
-    log_strength = np.log(np.maximum(drawn, 1e-12))[:, None, :]
+    picks = rng.integers(0, len(ensemble), size=n_iterations)
+    anchor = np.log(np.maximum(ensemble[picks], 1e-12))
+    entry_rate = _draw_rows(form.entry_rate, picks, n_drivers)
+    dnf_rate = _draw_rows(form.dnf_rate, picks, n_drivers)
 
-    gumbel = rng.gumbel(size=shape + (n_drivers,))
-    keys = log_strength + gumbel
-    # Anyone who did not take the flag cannot be classified, so they are pushed
-    # below every finisher rather than removed — which keeps the array shape.
-    keys = np.where(finished, keys, -np.inf)
-
-    # Rank 0 is the winner. argsort of argsort turns keys into positions.
-    order = np.argsort(-keys, axis=-1, kind="stable")
-    rank = np.argsort(order, axis=-1, kind="stable")
+    # The driver's own norm, held fixed at the anchor: surprise is measured
+    # against how they were expected to do all along, not against a target that
+    # chases their recent results and so can never be beaten twice running.
+    norm = expected_beat_fraction(ensemble, np.atleast_2d(form.entry_rate).mean(axis=0))[picks]
 
     # A grid smaller than the points table scores only as far as it reaches.
     scoring = np.zeros(n_drivers)
     payable = min(len(points_table), n_drivers)
     scoring[:payable] = points_table[:payable]
-    awarded = np.where(finished, scoring[rank], 0.0)
 
-    points += awarded.sum(axis=1)
-    wins += (finished & (rank == 0)).sum(axis=1)
-    podiums += (finished & (rank < 3)).sum(axis=1)
+    deviation = np.zeros((n_iterations, n_drivers))
+    lead_share = np.empty((extra + 1, n_drivers))
+    lead_share[0] = _lead_share(points, wins, podiums)
+
+    for race in range(extra):
+        entered = rng.random((n_iterations, n_drivers)) < entry_rate
+        finished = entered & (rng.random((n_iterations, n_drivers)) >= dnf_rate)
+
+        keys = anchor + deviation + rng.gumbel(size=(n_iterations, n_drivers))
+        # Anyone who did not take the flag cannot be classified, so they are
+        # pushed below every finisher rather than removed — which keeps the
+        # array shape.
+        keys = np.where(finished, keys, -np.inf)
+
+        # Rank 0 is the winner. argsort of argsort turns keys into positions.
+        order = np.argsort(-keys, axis=-1, kind="stable")
+        rank = np.argsort(order, axis=-1, kind="stable")
+
+        points += np.where(finished, scoring[rank], 0.0)
+        wins += finished & (rank == 0)
+        podiums += finished & (rank < 3)
+
+        lead_share[race + 1] = _lead_share(points, wins, podiums)
+
+        if race + 1 == extra:
+            break  # nothing left for the updated form to act on
+        deviation = _advance_form(
+            deviation, rank, finished, norm, dynamics=dynamics, rng=rng
+        )
 
     return {
         "points": points,
         "wins": wins,
         "podiums": podiums,
         "extra_races": np.full(n_iterations, extra),
+        "lead_share": lead_share,
     }
+
+
+def _advance_form(
+    deviation: np.ndarray,
+    rank: np.ndarray,
+    finished: np.ndarray,
+    norm: np.ndarray,
+    *,
+    dynamics: FormDynamics,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """One step of the form process, given how the race just run turned out."""
+    if dynamics.is_static:
+        return deviation * dynamics.persistence
+
+    updated = deviation * dynamics.persistence
+
+    if dynamics.momentum:
+        # Observed share of the classified field beaten. Only finishers update:
+        # a retirement is not evidence about pace, which is the same rule the
+        # strength fit applies to the races that actually happened.
+        n_finishers = finished.sum(axis=1, keepdims=True)
+        beat = np.where(
+            n_finishers > 1,
+            (n_finishers - 1 - rank) / np.maximum(n_finishers - 1, 1),
+            0.5,
+        )
+        surprise = np.where(finished, beat - norm, 0.0)
+        updated = updated + dynamics.momentum * surprise
+
+    if dynamics.volatility:
+        updated = updated + dynamics.volatility * rng.standard_normal(deviation.shape)
+
+    return np.clip(updated, -dynamics.band, dynamics.band)
+
+
+def _lead_share(
+    points: np.ndarray, wins: np.ndarray, podiums: np.ndarray
+) -> np.ndarray:
+    """Fraction of iterations in which each driver heads the standings."""
+    return champion_probability(points, wins, podiums)
 
 
 def champion_probability(
