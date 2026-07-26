@@ -1,6 +1,8 @@
 .method {
   max-width: 68ch;
-  margin: 28px 0;
+  /* Prose is capped to a readable measure, so centre it rather than leaving
+     half a wide window empty beside it. */
+  margin: 28px auto;
 }
 
 .method h1 {
