@@ -78,16 +78,20 @@ def actual_standings(form_full) -> np.ndarray:
     )
 
 
-def run(conn, years, *, iterations: int, dynamics: FormDynamics, seed: int) -> list[dict]:
-    """Every (season, cut) pair the history supports, scored."""
-    records = []
+def build_cases(conn, years, *, seed: int) -> list[dict]:
+    """Fit every (season, cut) once, so candidate dynamics can be swept cheaply.
+
+    Fitting the strength ensemble is almost all of the cost here and none of it
+    depends on the dynamics being scored, so a grid search that refitted per
+    candidate would spend hours recomputing identical numbers.
+    """
+    cases = []
     for year, n_races in years:
         try:
             full = load_season_form(conn, year, ensemble=1)
         except ValueError:
             continue
-        truth = actual_standings(full)
-        champion = int(np.argmax(truth))
+        champion_id = int(full.driver_ids[int(np.argmax(actual_standings(full)))])
 
         for remaining in REMAINING:
             cut = n_races - remaining
@@ -95,44 +99,67 @@ def run(conn, years, *, iterations: int, dynamics: FormDynamics, seed: int) -> l
                 continue
             try:
                 form = load_season_form(
-                    conn, year, through_race=cut, rng=np.random.default_rng([seed, year, cut])
+                    conn,
+                    year,
+                    through_race=cut,
+                    rng=np.random.default_rng([seed, year, cut]),
                 )
             except ValueError:
                 continue
 
-            result = simulate_continuation(
-                form,
-                rng=np.random.default_rng([seed, year, cut, remaining]),
-                n_iterations=iterations,
-                target_races=n_races,
-                dynamics=dynamics,
-            )
-            odds = champion_probability(
-                result["points"], result["wins"], result["podiums"]
-            )
-
-            # The two forms are built from the same season, so driver_ids line
-            # up by construction; mapped by id rather than position anyway,
-            # because a driver who debuts after the cut is absent from one.
+            # Mapped by driver id rather than by position, because a driver who
+            # debuts after the cut is in one form and not the other.
             position = {int(d): i for i, d in enumerate(form.driver_ids)}
-            champion_id = int(full.driver_ids[champion])
             if champion_id not in position:
                 continue
 
             leader = int(np.argmax(form.points))
-            records.append(
+            cases.append(
                 {
                     "year": year,
                     "cut": cut,
                     "remaining": remaining,
-                    "p_champion": float(odds[position[champion_id]]),
-                    "p_leader": float(odds[leader]),
+                    "n_races": n_races,
+                    "form": form,
+                    "champion_slot": position[champion_id],
+                    "leader_slot": leader,
                     "leader_won": bool(int(form.driver_ids[leader]) == champion_id),
                     "margin": float(
                         np.max(form.points) - np.partition(form.points, -2)[-2]
                     ),
                 }
             )
+    return cases
+
+
+def score(cases, *, iterations: int, dynamics: FormDynamics, seed: int) -> list[dict]:
+    """Run every cut under one set of dynamics and record the odds it gave."""
+    records = []
+    for case in cases:
+        form = case["form"]
+        result = simulate_continuation(
+            form,
+            rng=np.random.default_rng(
+                [seed, case["year"], case["cut"], case["remaining"]]
+            ),
+            n_iterations=iterations,
+            target_races=case["n_races"],
+            dynamics=dynamics,
+        )
+        odds = champion_probability(
+            result["points"], result["wins"], result["podiums"]
+        )
+        records.append(
+            {
+                "year": case["year"],
+                "cut": case["cut"],
+                "remaining": case["remaining"],
+                "p_champion": float(odds[case["champion_slot"]]),
+                "p_leader": float(odds[case["leader_slot"]]),
+                "leader_won": case["leader_won"],
+                "margin": case["margin"],
+            }
+        )
     return records
 
 
@@ -190,6 +217,66 @@ def report(label: str, records: list[dict]) -> None:
     print(f"  brier {brier(records):.4f}   log-loss {log_loss(records):.4f}")
 
 
+#: Coarse sweep for `--search`. Persistence sits high throughout because the
+#: overconfidence being corrected is a *season-level* error: independent
+#: race-to-race noise averages out over eight races and barely moves a title,
+#: whereas a form deviation that persists does not average out at all. That is
+#: also why the per-race calibration in `calibrate_form.py` cannot find this on
+#: its own — it scores each pair separately, and so is blind to exactly the
+#: correlation across races that decides a championship.
+SEARCH_GRID = tuple(
+    FormDynamics(persistence=p, volatility=v, momentum=m)
+    for p in (0.7, 0.9, 1.0)
+    for v in (0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0)
+    for m in (0.0, 0.5, 1.0)
+)
+
+
+def holdout(cases, *, iterations: int, seed: int) -> None:
+    """Fit the grid on half the seasons, score it on the other half.
+
+    Three parameters chosen on 425 cuts sounds comfortable, but the cuts within
+    a season overlap heavily and the real sample size is closer to the number of
+    seasons. Splitting by parity of year keeps eras on both sides — a
+    chronological split would fit the drift of the 1950s and test it on the
+    hybrid era — and asks the only question that matters: do the settings
+    picked without seeing these seasons still beat static form on them?
+    """
+    halves = {
+        "odd": [c for c in cases if c["year"] % 2],
+        "even": [c for c in cases if not c["year"] % 2],
+    }
+    print("\nsplit-half check")
+    for fit_on, test_on in (("odd", "even"), ("even", "odd")):
+        ranked = sorted(
+            (
+                log_loss(
+                    score(
+                        halves[fit_on],
+                        iterations=iterations,
+                        dynamics=dynamics,
+                        seed=seed,
+                    )
+                ),
+                index,
+                dynamics,
+            )
+            for index, dynamics in enumerate(SEARCH_GRID)
+        )
+        picked = ranked[0][2]
+        tested = log_loss(
+            score(halves[test_on], iterations=iterations, dynamics=picked, seed=seed)
+        )
+        baseline = log_loss(
+            score(halves[test_on], iterations=iterations, dynamics=STATIC_FORM, seed=seed)
+        )
+        print(
+            f"  fit {fit_on} -> p={picked.persistence} v={picked.volatility}"
+            f" m={picked.momentum}; on {test_on}: fitted {tested:.4f}"
+            f" vs static {baseline:.4f} ({100 * (baseline - tested) / baseline:+.1f}%)"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=settings.db_path)
@@ -199,6 +286,11 @@ def main() -> int:
     parser.add_argument("--persistence", type=float, default=None)
     parser.add_argument("--volatility", type=float, default=None)
     parser.add_argument("--momentum", type=float, default=None)
+    parser.add_argument(
+        "--search",
+        action="store_true",
+        help="sweep SEARCH_GRID and rank by title-level log-loss",
+    )
     parser.add_argument("--out", type=Path, default=Path("data/title_backtest.json"))
     args = parser.parse_args()
 
@@ -207,34 +299,58 @@ def main() -> int:
         years = [(int(r.year), int(r.races)) for r in conn.execute(_YEARS).all()]
         if args.years:
             years = [row for row in years if row[0] in set(args.years)]
+        cases = build_cases(conn, years, seed=args.seed)
+    print(f"{len(cases)} cuts across {len(years)} seasons")
 
-        candidates = {"static": STATIC_FORM}
-        if args.volatility is not None or args.momentum is not None:
-            candidates["fitted"] = FormDynamics(
-                persistence=args.persistence or 0.0,
-                volatility=args.volatility or 0.0,
-                momentum=args.momentum or 0.0,
+    if args.search:
+        ranked = []
+        for dynamics in SEARCH_GRID:
+            records = score(
+                cases, iterations=args.iterations, dynamics=dynamics, seed=args.seed
             )
+            ranked.append((log_loss(records), brier(records), dynamics))
+            print(
+                f"  p={dynamics.persistence:<4} v={dynamics.volatility:<5}"
+                f" m={dynamics.momentum:<4}  log-loss {ranked[-1][0]:.4f}"
+                f"  brier {ranked[-1][1]:.4f}"
+            )
+        ranked.sort(key=lambda row: row[0])
+        print("\nbest by title log-loss:")
+        for loss, score_, dynamics in ranked[:5]:
+            print(
+                f"  p={dynamics.persistence:<4} v={dynamics.volatility:<5}"
+                f" m={dynamics.momentum:<4}  log-loss {loss:.4f}  brier {score_:.4f}"
+            )
+        chosen = ranked[0][2]
+        holdout(cases, iterations=args.iterations, seed=args.seed)
+    elif args.volatility is not None or args.momentum is not None:
+        chosen = FormDynamics(
+            persistence=args.persistence or 0.0,
+            volatility=args.volatility or 0.0,
+            momentum=args.momentum or 0.0,
+        )
+    else:
+        chosen = None
 
-        results = {}
-        for label, dynamics in candidates.items():
-            records = run(
-                conn,
-                years,
-                iterations=args.iterations,
-                dynamics=dynamics,
-                seed=args.seed,
-            )
-            report(label, records)
-            results[label] = {
-                "dynamics": vars(dynamics),
-                "brier": brier(records),
-                "log_loss": log_loss(records),
-                "reliability": reliability(
-                    records, [0.0, 0.5, 0.7, 0.85, 0.95, 0.99, 1.0001]
-                ),
-                "records": records,
-            }
+    candidates = {"static": STATIC_FORM}
+    if chosen is not None and not chosen.is_static:
+        candidates["fitted"] = chosen
+
+    results = {}
+    for label, dynamics in candidates.items():
+        records = score(
+            cases, iterations=args.iterations, dynamics=dynamics, seed=args.seed
+        )
+        report(label, records)
+        results[label] = {
+            "dynamics": vars(dynamics),
+            "brier": brier(records),
+            "log_loss": log_loss(records),
+            "reliability": reliability(
+                records, [0.0, 0.5, 0.7, 0.85, 0.95, 0.99, 1.0001]
+            ),
+            "records": records,
+        }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(results, indent=2))
