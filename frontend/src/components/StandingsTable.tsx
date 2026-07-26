@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import type { Metric, SeasonDriverRow } from '../types'
+import type { SeasonDriverRow } from '../types'
 import ConfidenceBar from './ConfidenceBar'
 import SimStatCell from './SimStatCell'
 import './StandingsTable.css'
@@ -14,7 +14,15 @@ interface Props {
   targetRaces: number
 }
 
-const METRICS: { key: Exclude<Metric, 'championships'>; label: string; decimals: number }[] = [
+/**
+ * Named explicitly rather than derived from the shared `Metric` union: this
+ * table renders the columns a season standings row carries, which is a
+ * different question from what the all-time leaderboard offers. Deriving one
+ * from the other only couples them until they disagree.
+ */
+type StandingsMetric = 'points' | 'wins' | 'podiums' | 'poles'
+
+const METRICS: { key: StandingsMetric; label: string; decimals: number }[] = [
   { key: 'points', label: 'Points', decimals: 0 },
   { key: 'wins', label: 'Wins', decimals: 0 },
   { key: 'podiums', label: 'Podiums', decimals: 0 },
@@ -22,7 +30,7 @@ const METRICS: { key: Exclude<Metric, 'championships'>; label: string; decimals:
 ]
 
 export default function StandingsTable({ rows, seasonRaces, targetRaces }: Props) {
-  const [metric, setMetric] = useState<Exclude<Metric, 'championships'>>('points')
+  const [metric, setMetric] = useState<StandingsMetric>('points')
   const active = METRICS.find((m) => m.key === metric)!
 
   const sorted = useMemo(

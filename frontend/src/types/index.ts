@@ -119,7 +119,13 @@ export interface ChampionOdds {
 }
 
 /** Which metric a table or leaderboard is showing. */
-export type Metric = 'wins' | 'podiums' | 'poles' | 'points' | 'championships'
+export type Metric =
+  | 'wins'
+  | 'quality_wins'
+  | 'podiums'
+  | 'poles'
+  | 'points'
+  | 'championships'
 
 /** Which of the three bases a figure is drawn from. */
 export type Basis = 'sim' | 'scaled' | 'actual'
@@ -201,7 +207,9 @@ export interface DriverSeason {
   actual_podiums: number
   actual_poles: number
   actual_points: number
+  actual_quality_wins: number
   scaled_wins: number
+  quality_wins: SimStat
   wins: SimStat
   podiums: SimStat
   poles: SimStat
@@ -223,6 +231,8 @@ export interface CareerTotals {
   scaled_wins: number
   scaled_podiums: number
   scaled_poles: number
+  actual_quality_wins: number
+  quality_wins: SimStat
   wins: SimStat
   podiums: SimStat
   poles: SimStat
@@ -237,4 +247,75 @@ export interface DriverDetail {
   run: RunInfo
   career: CareerTotals
   seasons: DriverSeason[]
+  rating: DriverRating | null
+}
+
+/** Which column the ratings table is ordered by. */
+export type RatingSort =
+  | 'peak'
+  | 'teammate'
+  | 'vs_field'
+  | 'quality_wins'
+  | 'difficulty'
+
+export interface RatingRow {
+  rank: number
+  driver_id: number
+  name: string
+  nationality: string | null
+  first_year: number
+  last_year: number
+  races: number
+  peak_rating: number
+  peak_teammate_rating: number
+  peak_vs_field: number
+  final_rating: number
+  wins: number
+  quality_wins: number
+  mean_win_difficulty: number | null
+  teammate_races: number
+  teammate_wins: number
+}
+
+export interface RatingBoard {
+  sort: RatingSort
+  min_races: number
+  total: number
+  rows: RatingRow[]
+}
+
+export interface NotableWin {
+  race_id: number
+  year: number
+  race_name: string
+  driver_id: number
+  driver_name: string
+  constructor_name: string | null
+  difficulty: number
+  expected_position: number
+  starters: number
+}
+
+export interface RatingPoint {
+  race_id: number
+  year: number
+  rating: number
+  teammate_rating: number
+  position: number | null
+  win_difficulty: number | null
+}
+
+export interface DriverRating {
+  peak_rating: number
+  peak_teammate_rating: number
+  peak_vs_field: number
+  final_rating: number
+  final_teammate_rating: number
+  wins: number
+  quality_wins: number
+  mean_win_difficulty: number | null
+  teammate_races: number
+  teammate_wins: number
+  teammate_rank: number | null
+  trace: RatingPoint[]
 }

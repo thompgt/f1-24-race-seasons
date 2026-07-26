@@ -1,0 +1,96 @@
+.notable {
+  min-width: 0;
+}
+
+.notable h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.notable > .secondary {
+  margin: 4px 0 14px;
+  font-size: 13px;
+}
+
+.notable-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notable-list li {
+  display: grid;
+  grid-template-columns: 46px 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--grid);
+  font-size: 13px;
+}
+
+.notable-value {
+  text-align: right;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.notable-hard .notable-value {
+  color: var(--series-hard);
+}
+
+.notable-easy .notable-value {
+  color: var(--series-easy);
+}
+
+/* 4px rounded data-end, anchored to a track that shows the full scale. */
+.notable-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.notable-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.notable-hard .notable-bar > span {
+  background: var(--series-hard);
+}
+
+.notable-easy .notable-bar > span {
+  background: var(--series-easy);
+}
+
+.notable-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notable-who a {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.notable-who a:hover {
+  color: var(--series-sim);
+  text-decoration: underline;
+}
+
+.notable-expected {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .notable-expected {
+    display: none;
+  }
+}

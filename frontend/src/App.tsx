@@ -4,6 +4,7 @@ import TabBar from './components/TabBar'
 import DriverPage from './pages/DriverPage'
 import HistoricalPage from './pages/HistoricalPage'
 import MethodPage from './pages/MethodPage'
+import RatingsPage from './pages/RatingsPage'
 import SeasonPage from './pages/SeasonPage'
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/seasons" element={<SeasonPage />} />
           <Route path="/seasons/:year" element={<SeasonPage />} />
           <Route path="/historical" element={<HistoricalPage />} />
+          <Route path="/ratings" element={<RatingsPage />} />
           <Route path="/method" element={<MethodPage />} />
           <Route path="/drivers/:driverId" element={<DriverPage />} />
           <Route path="*" element={<Navigate to="/seasons" replace />} />

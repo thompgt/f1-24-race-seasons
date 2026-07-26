@@ -9,6 +9,7 @@ import './HistoricalPage.css'
 
 const METRICS: { key: Metric; label: string }[] = [
   { key: 'wins', label: 'Wins' },
+  { key: 'quality_wins', label: 'Quality wins' },
   { key: 'podiums', label: 'Podiums' },
   { key: 'poles', label: 'Poles' },
   { key: 'points', label: 'Points' },

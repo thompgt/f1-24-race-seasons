@@ -1,0 +1,74 @@
+.table-scroll {
+  overflow-x: auto;
+}
+
+.ratings-table {
+  width: 100%;
+  min-width: 760px;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+
+.ratings-table th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--axis);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ratings-table th.sorted {
+  color: var(--text-primary);
+}
+
+.ratings-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+
+.ratings-table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.ratings-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ratings-table .col-rank {
+  width: 34px;
+  text-align: right;
+}
+
+.rating-sub {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+/* Difficulty carries a word as well as a colour in the legend above the table,
+   so the tint is reinforcement rather than the only signal. */
+.difficulty.hard {
+  color: var(--series-hard);
+  font-weight: 500;
+}
+
+.difficulty.easy {
+  color: var(--series-easy);
+  font-weight: 500;
+}
+
+.ratings-table a.driver-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.ratings-table a.driver-name:hover {
+  color: var(--series-sim);
+  text-decoration: underline;
+}

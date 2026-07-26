@@ -5,6 +5,7 @@ import './TabBar.css'
 const TABS = [
   { to: '/seasons', label: 'Seasons' },
   { to: '/historical', label: 'Historical Stats' },
+  { to: '/ratings', label: 'Ratings' },
   { to: '/method', label: 'Method' },
 ]
 

@@ -11,6 +11,9 @@ import type {
   LeaderBoard,
   LeaderQuery,
   Meta,
+  NotableWin,
+  RatingBoard,
+  RatingSort,
   SeasonDetail,
   SeasonSummary,
 } from '../types'
@@ -89,4 +92,18 @@ export function getDriver(driverId: number): Promise<DriverDetail> {
 
 export function searchDrivers(q: string): Promise<DriverRef[]> {
   return get<DriverRef[]>('/drivers/search', { q })
+}
+
+export function getRatingLeaders(
+  sort: RatingSort,
+  options: { min_races?: number; limit?: number } = {},
+): Promise<RatingBoard> {
+  return get<RatingBoard>('/ratings/leaders', { sort, ...options })
+}
+
+export function getNotableWins(
+  order: 'hardest' | 'easiest',
+  limit = 12,
+): Promise<NotableWin[]> {
+  return get<NotableWin[]>('/ratings/wins', { order, limit })
 }

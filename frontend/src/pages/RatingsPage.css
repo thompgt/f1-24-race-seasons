@@ -1,0 +1,52 @@
+/* `.control`, `.control-label` and `.segmented` are shared with the historical
+   page, which loads its own stylesheet; only the ratings-specific pieces live
+   here. The controls row repeats its layout rules so this page still stands up
+   if the two are ever loaded independently. */
+
+.ratings-header {
+  margin: 28px 0 20px;
+}
+
+.ratings-header h1 {
+  font-size: 30px;
+}
+
+.ratings-header p {
+  max-width: 66ch;
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+.ratings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 20px;
+  padding: 14px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ratings-hint {
+  max-width: 78ch;
+  margin: 10px 2px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.notable-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 28px 36px;
+  margin: 36px 0 0;
+  padding-top: 26px;
+  border-top: 1px solid var(--grid);
+}
+
+.ratings-footnote {
+  max-width: 72ch;
+  margin: 28px 0 40px;
+  font-size: 13px;
+  line-height: 1.6;
+}

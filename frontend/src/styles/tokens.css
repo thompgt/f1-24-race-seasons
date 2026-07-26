@@ -31,6 +31,14 @@
   /* Slot 3 â€” reserved for a third comparison series. */
   --series-third: #1baf7a;
 
+  /* Win difficulty. Text-weight steps: the light green above is a fill colour
+     and only reaches 2.7:1 on this surface, which is too low for a number the
+     reader has to actually read. Validated all-pairs for CVD — deutan dE 8.7,
+     normal-vision dE 25.2, both over 3:1 contrast. Colour is reinforcement
+     only; the value is always printed beside it. */
+  --series-hard: #14855c;
+  --series-easy: #c2451f;
+
   --status-good: #0ca30c;
   --status-critical: #d03b3b;
   --delta-up: #006300;
@@ -59,6 +67,8 @@
     --series-sim-soft: #184f95;
     --series-actual: #d95926;
     --series-third: #199e70;
+  --series-hard: #199e70;
+  --series-easy: #d95926;
 
     --delta-up: #0ca30c;
   }
@@ -83,6 +93,8 @@
   --series-sim-soft: #184f95;
   --series-actual: #d95926;
   --series-third: #199e70;
+  --series-hard: #199e70;
+  --series-easy: #d95926;
 
   --delta-up: #0ca30c;
 }

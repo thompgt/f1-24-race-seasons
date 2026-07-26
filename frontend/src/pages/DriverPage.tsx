@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import DriverRatingPanel from '../components/DriverRatingPanel'
 import DriverSeasonChart from '../components/DriverSeasonChart'
 import SimStatCell from '../components/SimStatCell'
 import { ErrorState, LoadingState } from '../components/States'
@@ -64,6 +65,10 @@ export default function DriverPage() {
           </div>
         ))}
       </section>
+
+      {driver.data.rating && (
+        <DriverRatingPanel rating={driver.data.rating} career={career} />
+      )}
 
       {titleOdds.length > 0 && (
         <section className="titles card">

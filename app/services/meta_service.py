@@ -86,9 +86,53 @@ async def build_meta(db: AsyncSession, run: RunInfo) -> Meta:
                 "sum of the medians."
             ),
         ),
+        MethodStep(
+            title="Weigh each win by who had to be beaten",
+            detail=(
+                "An Elo rating is built from every pairwise result in the record, and "
+                "a win is credited with the winner's expected finishing position going "
+                "into that race — normalised so the average win in history is worth "
+                "1.00. Because that credit is a per-race value, the 24-race resampling "
+                "applies to it unchanged, and the two corrections compose."
+            ),
+        ),
     ]
 
     caveats = [
+        Caveat(
+            key="elo_drift",
+            title="Raw Elo ratings drift upward across eras",
+            detail=(
+                "Elo is zero-sum within a race but not across history: drivers enter on "
+                "a fixed rating and leave carrying whatever they earned, so the pool "
+                "inflates as the sport grows. A raw all-time rating table therefore "
+                "leans modern for reasons that have nothing to do with driving. Win "
+                "difficulty is immune, since it depends only on rating differences "
+                "inside a single race; for comparing drivers across eras, use the "
+                "team-mate rating or the margin over the field."
+            ),
+        ),
+        Caveat(
+            key="elo_car",
+            title="The overall rating cannot separate driver from car",
+            detail=(
+                "It rates the entry, which is what a rival actually has to beat. That "
+                "is the right input to win difficulty, but it means a great driver in a "
+                "poor car rates low. The team-mate rating is the counterweight: it "
+                "compares only drivers sharing a garage, so machinery very largely "
+                "cancels. Both are shown side by side rather than one being presented "
+                "as the answer."
+            ),
+        ),
+        Caveat(
+            key="elo_retirements",
+            title="Retirements are not rated",
+            detail=(
+                "Only classified finishers are compared, because a blown engine is not "
+                "a driver losing a duel. The cost is that an unreliable car carries no "
+                "rating penalty for failing to finish."
+            ),
+        ),
         Caveat(
             key="fastest_lap",
             title="The fastest-lap point only exists from 2004",
