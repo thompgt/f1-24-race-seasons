@@ -11,6 +11,8 @@ from app.schemas.common import RunInfo, SimStat
 
 class Metric(StrEnum):
     WINS = "wins"
+    #: Wins weighted by how contested each one was — see `app.sim.elo`.
+    QUALITY_WINS = "quality_wins"
     PODIUMS = "podiums"
     POLES = "poles"
     POINTS = "points"

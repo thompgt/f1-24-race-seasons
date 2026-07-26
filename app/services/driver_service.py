@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.common import ConstructorRef, DriverRef, RunInfo, SimStat
 from app.schemas.driver import CareerTotals, DriverDetail, DriverSeason
+from app.services import ratings_service
 
 
 def _stat(row, prefix: str) -> SimStat:
@@ -71,7 +72,9 @@ async def get_driver(db: AsyncSession, driver_id: int, run: RunInfo) -> DriverDe
             actual_podiums=row.actual_podiums,
             actual_poles=row.actual_poles,
             actual_points=row.actual_points_no_fl,
+            actual_quality_wins=row.actual_quality_wins,
             scaled_wins=row.scaled_wins,
+            quality_wins=_stat(row, "quality_wins"),
             wins=_stat(row, "wins"),
             podiums=_stat(row, "podiums"),
             poles=_stat(row, "poles"),
@@ -106,6 +109,8 @@ async def get_driver(db: AsyncSession, driver_id: int, run: RunInfo) -> DriverDe
             scaled_wins=career.scaled_wins,
             scaled_podiums=career.scaled_podiums,
             scaled_poles=career.scaled_poles,
+            actual_quality_wins=career.actual_quality_wins,
+            quality_wins=_stat(career, "quality_wins"),
             wins=_stat(career, "wins"),
             podiums=_stat(career, "podiums"),
             poles=_stat(career, "poles"),
@@ -114,6 +119,7 @@ async def get_driver(db: AsyncSession, driver_id: int, run: RunInfo) -> DriverDe
             championships_at_least={int(k): v for k, v in thresholds.items()},
         ),
         seasons=seasons,
+        rating=await ratings_service.driver_rating(db, driver_id),
     )
 
 

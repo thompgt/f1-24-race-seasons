@@ -11,8 +11,15 @@ from app.schemas.common import DriverRef, RunInfo
 from app.schemas.driver import DriverDetail
 from app.schemas.historical import Basis, GroupBy, LeaderBoard, Metric
 from app.schemas.meta import Meta
+from app.schemas.ratings import NotableWin, RatingBoard, RatingSort
 from app.schemas.season import ChampionOdds, SeasonDetail, SeasonSummary
-from app.services import driver_service, historical_service, meta_service, season_service
+from app.services import (
+    driver_service,
+    historical_service,
+    meta_service,
+    ratings_service,
+    season_service,
+)
 
 router = APIRouter()
 
@@ -107,6 +114,28 @@ async def get_leaders(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/ratings/leaders", response_model=RatingBoard)
+async def get_rating_leaders(
+    sort: RatingSort = RatingSort.TEAMMATE,
+    min_races: int = Query(ratings_service.DEFAULT_MIN_RACES, ge=0, le=400),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> RatingBoard:
+    return await ratings_service.leaderboard(
+        db, sort=sort, min_races=min_races, limit=limit, offset=offset
+    )
+
+
+@router.get("/ratings/wins", response_model=list[NotableWin])
+async def get_notable_wins(
+    order: str = Query("hardest", pattern="^(hardest|easiest)$"),
+    limit: int = Query(15, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+) -> list[NotableWin]:
+    return await ratings_service.notable_wins(db, hardest=order == "hardest", limit=limit)
 
 
 @router.get("/drivers/search", response_model=list[DriverRef])

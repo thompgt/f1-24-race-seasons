@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.common import RunInfo, SimStat
 from app.schemas.historical import Basis, GroupBy, LeaderBoard, LeaderRow, Metric
+from app.sim.bootstrap import scale_of
 from app.sim.career import Summary, decode_draws
 
 #: Career leaderboards exclude one-race wonders by default; a single win from a
@@ -30,6 +31,7 @@ DEFAULT_MIN_RACES = 10
 #: drivers could never score — the very bias being corrected.
 _CAREER_METRIC_COLUMN = {
     Metric.WINS: "wins",
+    Metric.QUALITY_WINS: "quality_wins",
     Metric.PODIUMS: "podiums",
     Metric.POLES: "poles",
     Metric.POINTS: "points",
@@ -38,6 +40,7 @@ _CAREER_METRIC_COLUMN = {
 
 _SEASON_METRIC_COLUMN = {
     Metric.WINS: "wins",
+    Metric.QUALITY_WINS: "quality_wins",
     Metric.PODIUMS: "podiums",
     Metric.POLES: "poles",
     Metric.POINTS: "points_no_fl",
@@ -45,6 +48,7 @@ _SEASON_METRIC_COLUMN = {
 
 _BLOB_METRIC = {
     Metric.WINS: "wins",
+    Metric.QUALITY_WINS: "quality_wins",
     Metric.PODIUMS: "podiums",
     Metric.POLES: "poles",
     Metric.POINTS: "points_no_fl",
@@ -264,7 +268,12 @@ async def _decode_range_draws(
         else:
             totals[entity] = vector
 
-    return {entity: Summary.of(vector) for entity, vector in totals.items()}
+    # Quality wins are stored as fixed-point hundredths, so the summed draws have
+    # to be brought back into real units before they are reported.
+    divisor = scale_of(_BLOB_METRIC[metric])
+    return {
+        entity: Summary.of(vector).divided_by(divisor) for entity, vector in totals.items()
+    }
 
 
 async def _groups(
