@@ -1,0 +1,479 @@
+"""Precompute every season's 24-race bootstrap into data/f1.db.
+
+    python scripts/run_simulations.py --iterations 10000 --seed 20240424
+
+Each invocation writes a new run_id and marks it complete only once every table
+is written, so the API — which reads the newest complete run — never serves a
+half-finished rebuild.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import numpy as np  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+from app.core.database import Base  # noqa: E402
+from app.models import sim as _sim  # noqa: E402,F401  (registers tables)
+from app.models import source as _source  # noqa: E402,F401
+from app.services.event_source import list_seasons, load_season_events  # noqa: E402
+from app.sim.bootstrap import (  # noqa: E402
+    DEFAULT_ITERATIONS,
+    DEFAULT_TARGET_RACES,
+    simulate_season,
+    summarise,
+)
+from app.sim.career import Summary, aggregate_group, encode_draws, probability_at_least  # noqa: E402
+
+logger = logging.getLogger("run_simulations")
+
+#: Metrics whose per-iteration draws are persisted and rolled up into careers.
+PERSISTED_DRIVER_METRICS = ("points", "points_no_fl", "wins", "podiums", "poles", "entries")
+PERSISTED_CONSTRUCTOR_METRICS = ("points", "points_no_fl", "wins", "podiums")
+
+#: Grouping dimensions offered by the historical tab. Decade and era are served
+#: by the year-range filter instead: summing every driver's wins within a decade
+#: would just return 24 x the number of seasons, which says nothing.
+GROUP_DIMENSIONS = ("constructor", "driver_nationality", "constructor_nationality")
+
+CAREER_METRICS = ("points", "points_no_fl", "wins", "podiums", "poles", "championships")
+TITLE_THRESHOLDS = range(1, 11)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _quantile_columns(prefix: str, draws: np.ndarray) -> dict[str, float]:
+    stats = summarise(draws)
+    return {
+        f"{prefix}_mean": stats["mean"],
+        f"{prefix}_median": stats["median"],
+        f"{prefix}_p2_5": stats["p2_5"],
+        f"{prefix}_p97_5": stats["p97_5"],
+    }
+
+
+def _summary_columns(prefix: str, summary: Summary) -> dict[str, float]:
+    return {
+        f"{prefix}_mean": summary.mean,
+        f"{prefix}_median": summary.median,
+        f"{prefix}_p2_5": summary.p2_5,
+        f"{prefix}_p97_5": summary.p97_5,
+    }
+
+
+def insert_many(conn, table: str, rows: list[dict]) -> None:
+    if not rows:
+        return
+    columns = list(rows[0])
+    statement = text(
+        f"INSERT INTO {table} ({', '.join(columns)}) "
+        f"VALUES ({', '.join(':' + c for c in columns)})"
+    )
+    conn.execute(statement, rows)
+
+
+def run_season(
+    conn, run_id: int, year: int, args, retained: dict, *, retain: bool = True
+) -> tuple[int, int]:
+    """Simulate one season, write its rows, and retain draws for the career pass.
+
+    `retain=False` for a season still in progress: it is still simulated and shown
+    in the Seasons tab as a projection, but folding a half-run season into career
+    totals would credit a driver with a full 24-race season they have not had.
+    """
+    events = load_season_events(conn, year)
+    result = simulate_season(
+        events,
+        master_seed=args.seed,
+        n_iterations=args.iterations,
+        target_races=args.target_races,
+    )
+
+    driver = result.driver
+    champion_probability = driver.champion_probability()
+    top3_probability = driver.top_three_probability()
+    actual_positions = _actual_positions(conn, year)
+
+    driver_rows = []
+    for i, driver_id in enumerate(driver.ids):
+        constructor = events.driver_constructor[i]
+        row = {
+            "run_id": run_id,
+            "year": year,
+            "driver_id": int(driver_id),
+            "constructor_id": int(constructor) if constructor >= 0 else None,
+            "actual_races": int(driver.actual["entries"][i]),
+            "actual_points": float(driver.actual["points"][i]),
+            "actual_points_no_fl": float(driver.actual["points_no_fl"][i]),
+            "actual_wins": float(driver.actual["wins"][i]),
+            "actual_podiums": float(driver.actual["podiums"][i]),
+            "actual_poles": float(driver.actual["poles"][i]),
+            "scaled_points": float(driver.scaled["points"][i]),
+            "scaled_points_no_fl": float(driver.scaled["points_no_fl"][i]),
+            "scaled_wins": float(driver.scaled["wins"][i]),
+            "scaled_podiums": float(driver.scaled["podiums"][i]),
+            "scaled_poles": float(driver.scaled["poles"][i]),
+            "p_champion": float(champion_probability[i]),
+            "p_top3": float(top3_probability[i]),
+            "actual_position": actual_positions.get(int(driver_id)),
+        }
+        for metric in ("points", "wins", "podiums", "poles"):
+            row.update(
+                {k: float(v[i]) for k, v in _quantile_columns(metric, driver.totals[metric]).items()}
+            )
+        entries = summarise(driver.totals["entries"])
+        row.update(
+            {
+                "entries_mean": float(entries["mean"][i]),
+                "entries_p2_5": float(entries["p2_5"][i]),
+                "entries_p97_5": float(entries["p97_5"][i]),
+            }
+        )
+        driver_rows.append(row)
+
+    constructor_sim = result.constructor
+    constructor_champion = constructor_sim.champion_probability()
+    constructor_rows = []
+    for i, constructor_id in enumerate(constructor_sim.ids):
+        row = {
+            "run_id": run_id,
+            "year": year,
+            "constructor_id": int(constructor_id),
+            "actual_points": float(constructor_sim.actual["points"][i]),
+            "actual_wins": float(constructor_sim.actual["wins"][i]),
+            "actual_podiums": float(constructor_sim.actual["podiums"][i]),
+            "scaled_points": float(constructor_sim.scaled["points"][i]),
+            "scaled_wins": float(constructor_sim.scaled["wins"][i]),
+            "scaled_podiums": float(constructor_sim.scaled["podiums"][i]),
+            "p_champion": float(constructor_champion[i]),
+        }
+        for metric in ("points", "wins", "podiums"):
+            row.update(
+                {
+                    k: float(v[i])
+                    for k, v in _quantile_columns(metric, constructor_sim.totals[metric]).items()
+                }
+            )
+        constructor_rows.append(row)
+
+    # --- Per-iteration draws: stored, and retained for the career pass -------
+    blob_rows = []
+    for entity_result, metrics in (
+        (driver, PERSISTED_DRIVER_METRICS),
+        (constructor_sim, PERSISTED_CONSTRUCTOR_METRICS),
+    ):
+        championships = entity_result.championship_draws()
+        for metric in (*metrics, "championships"):
+            draws = (
+                championships
+                if metric == "championships"
+                else entity_result.iteration_draws(metric)
+            )
+            for i, entity_id in enumerate(entity_result.ids):
+                column = np.ascontiguousarray(draws[:, i])
+                blob_rows.append(
+                    {
+                        "run_id": run_id,
+                        "year": year,
+                        "entity_type": entity_result.entity,
+                        "entity_id": int(entity_id),
+                        "metric": metric,
+                        "dtype": str(column.dtype),
+                        "n_iterations": args.iterations,
+                        "data": encode_draws(column),
+                    }
+                )
+                if retain and metric in CAREER_METRICS:
+                    retained[entity_result.entity][int(entity_id)][metric].append(
+                        (year, column)
+                    )
+
+    insert_many(conn, "season_driver_sim", driver_rows)
+    insert_many(conn, "season_constructor_sim", constructor_rows)
+    insert_many(conn, "sim_iterations", blob_rows)
+    return len(driver_rows), len(constructor_rows)
+
+
+def _actual_positions(conn, year: int) -> dict[int, int]:
+    """Where each driver really finished the championship, for comparison."""
+    rows = conn.execute(
+        text(
+            """
+            SELECT rr.driver_id, SUM(rr.points_no_fl) AS pts, SUM(rr.is_win) AS wins
+            FROM race_results rr
+            JOIN races r ON r.race_id = rr.race_id AND r.excluded = 0
+            WHERE r.year = :year
+            GROUP BY rr.driver_id
+            ORDER BY pts DESC, wins DESC
+            """
+        ),
+        {"year": year},
+    ).all()
+    return {int(row.driver_id): position for position, row in enumerate(rows, start=1)}
+
+
+def write_careers(conn, run_id: int, retained: dict, args) -> int:
+    """Roll season draws into career totals, summing vectors not medians."""
+    actual_titles = dict(
+        conn.execute(
+            text(
+                """
+                SELECT actual_champion_driver_id, COUNT(*)
+                FROM seasons WHERE actual_champion_driver_id IS NOT NULL
+                GROUP BY actual_champion_driver_id
+                """
+            )
+        ).all()
+    )
+
+    rows = []
+    for driver_id, metrics in retained["driver"].items():
+        years = sorted({year for year, _ in metrics["wins"]})
+        career: dict[str, np.ndarray] = {}
+        for metric, entries in metrics.items():
+            total = np.zeros(args.iterations, dtype=np.int64)
+            for _, vector in entries:
+                total += vector.astype(np.int64)
+            career[metric] = total
+
+        row = {
+            "run_id": run_id,
+            "driver_id": driver_id,
+            "seasons_active": len(years),
+            "first_year": years[0],
+            "last_year": years[-1],
+            "actual_races": 0,
+            "actual_championships": int(actual_titles.get(driver_id, 0)),
+        }
+        for metric in ("wins", "podiums", "poles", "points", "championships"):
+            row.update(_summary_columns(metric, Summary.of(career[metric])))
+        row["championships_at_least"] = json.dumps(
+            probability_at_least(career["championships"], TITLE_THRESHOLDS)
+        )
+        rows.append(row)
+
+    # Actual and pro-rata career totals come straight from the season summaries,
+    # where both are already exact.
+    # Restricted to completed seasons, matching the draws retained above.
+    totals = conn.execute(
+        text(
+            """
+            SELECT sds.driver_id,
+                   SUM(sds.actual_races) AS races,
+                   SUM(sds.actual_wins) AS wins, SUM(sds.actual_podiums) AS podiums,
+                   SUM(sds.actual_poles) AS poles, SUM(sds.actual_points_no_fl) AS points,
+                   SUM(sds.scaled_wins) AS s_wins, SUM(sds.scaled_podiums) AS s_podiums,
+                   SUM(sds.scaled_poles) AS s_poles, SUM(sds.scaled_points_no_fl) AS s_points
+            FROM season_driver_sim sds
+            JOIN seasons s ON s.year = sds.year AND s.is_complete = 1
+            WHERE sds.run_id = :run
+            GROUP BY sds.driver_id
+            """
+        ),
+        {"run": run_id},
+    ).all()
+    by_driver = {int(r.driver_id): r for r in totals}
+    for row in rows:
+        actual = by_driver[row["driver_id"]]
+        row.update(
+            {
+                "actual_races": int(actual.races),
+                "actual_wins": float(actual.wins),
+                "actual_podiums": float(actual.podiums),
+                "actual_poles": float(actual.poles),
+                "actual_points": float(actual.points),
+                "scaled_wins": float(actual.s_wins),
+                "scaled_podiums": float(actual.s_podiums),
+                "scaled_poles": float(actual.s_poles),
+                "scaled_points": float(actual.s_points),
+            }
+        )
+
+    insert_many(conn, "career_driver_sim", rows)
+    return len(rows)
+
+
+def write_groups(conn, run_id: int, retained: dict, args) -> int:
+    """Aggregate careers by constructor and by nationality."""
+    driver_nationality = dict(
+        conn.execute(text("SELECT driver_id, nationality FROM drivers")).all()
+    )
+    constructor_meta = {
+        int(r.constructor_id): (r.name, r.nationality)
+        for r in conn.execute(
+            text("SELECT constructor_id, name, nationality FROM constructors")
+        ).all()
+    }
+
+    memberships: dict[str, dict[str, list]] = {dim: defaultdict(list) for dim in GROUP_DIMENSIONS}
+    labels: dict[tuple[str, str], str] = {}
+
+    for constructor_id, metrics in retained["constructor"].items():
+        name, nationality = constructor_meta.get(constructor_id, (str(constructor_id), None))
+        memberships["constructor"][str(constructor_id)].append(metrics)
+        labels[("constructor", str(constructor_id))] = name
+        if nationality:
+            memberships["constructor_nationality"][nationality].append(metrics)
+            labels[("constructor_nationality", nationality)] = nationality
+
+    for driver_id, metrics in retained["driver"].items():
+        nationality = driver_nationality.get(driver_id)
+        if nationality:
+            memberships["driver_nationality"][nationality].append(metrics)
+            labels[("driver_nationality", nationality)] = nationality
+
+    rows = []
+    for dimension, groups in memberships.items():
+        # Constructors have no pole or entry columns of their own.
+        metrics = (
+            ("wins", "podiums", "points", "points_no_fl", "championships")
+            if dimension != "driver_nationality"
+            else CAREER_METRICS
+        )
+        for group_key, members in groups.items():
+            for metric in metrics:
+                vectors = []
+                for member in members:
+                    if metric not in member:
+                        continue
+                    total = np.zeros(args.iterations, dtype=np.int64)
+                    for _, vector in member[metric]:
+                        total += vector.astype(np.int64)
+                    vectors.append(total)
+                if not vectors:
+                    continue
+                summary, _ = aggregate_group(vectors)
+                rows.append(
+                    {
+                        "run_id": run_id,
+                        "dimension": dimension,
+                        "group_key": group_key,
+                        "metric": metric,
+                        "group_label": labels[(dimension, group_key)],
+                        "n_entities": len(members),
+                        "actual": 0.0,
+                        "scaled": 0.0,
+                        "mean": summary.mean,
+                        "median": summary.median,
+                        "p2_5": summary.p2_5,
+                        "p97_5": summary.p97_5,
+                    }
+                )
+
+    insert_many(conn, "group_sim", rows)
+    return len(rows)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", type=Path, default=settings.db_path)
+    parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
+    parser.add_argument("--target-races", type=int, default=DEFAULT_TARGET_RACES)
+    parser.add_argument("--seed", type=int, default=20240424)
+    parser.add_argument("--years", nargs="*", type=int, help="limit to these seasons")
+    parser.add_argument(
+        "--replace", action="store_true", help="delete previous runs before writing"
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if not args.db.exists():
+        logger.error("No database at %s. Run scripts/build_db.py first.", args.db)
+        return 1
+
+    engine = create_engine(f"sqlite:///{args.db.as_posix()}", future=True)
+    Base.metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        if args.replace:
+            for table in (
+                "sim_iterations", "season_driver_sim", "season_constructor_sim",
+                "career_driver_sim", "group_sim", "sim_runs",
+            ):
+                conn.execute(text(f"DELETE FROM {table}"))
+            logger.info("Cleared previous runs")
+
+        run_id = conn.execute(
+            text(
+                """
+                INSERT INTO sim_runs
+                    (created_at, n_iterations, target_races, master_seed, is_complete,
+                     seasons_simulated)
+                VALUES (:created, :iterations, :target, :seed, 0, 0)
+                RETURNING run_id
+                """
+            ),
+            {
+                "created": _now(),
+                "iterations": args.iterations,
+                "target": args.target_races,
+                "seed": args.seed,
+            },
+        ).scalar_one()
+
+        years = args.years or list_seasons(conn)
+        logger.info(
+            "Run %d: %d seasons (%d-%d), %d iterations, target %d races, seed %d",
+            run_id, len(years), years[0], years[-1], args.iterations,
+            args.target_races, args.seed,
+        )
+
+        retained: dict = {
+            "driver": defaultdict(lambda: defaultdict(list)),
+            "constructor": defaultdict(lambda: defaultdict(list)),
+        }
+
+        in_progress = {
+            row.year
+            for row in conn.execute(
+                text("SELECT year FROM seasons WHERE is_complete = 0")
+            ).all()
+        }
+
+        for year in years:
+            retain = year not in in_progress
+            drivers, constructors = run_season(
+                conn, run_id, year, args, retained, retain=retain
+            )
+            note = "" if retain else "  (in progress: excluded from career totals)"
+            logger.info(
+                "  %d  %3d drivers  %2d constructors%s", year, drivers, constructors, note
+            )
+
+        career_rows = write_careers(conn, run_id, retained, args)
+        logger.info("careers   %6d drivers", career_rows)
+
+        group_rows = write_groups(conn, run_id, retained, args)
+        logger.info("groups    %6d rows", group_rows)
+
+        conn.execute(
+            text(
+                "UPDATE sim_runs SET is_complete = 1, seasons_simulated = :n WHERE run_id = :run"
+            ),
+            {"n": len(years), "run": run_id},
+        )
+
+    with engine.connect() as conn:
+        size = args.db.stat().st_size / 1_048_576
+        blobs = conn.execute(
+            text("SELECT COUNT(*) FROM sim_iterations WHERE run_id = :run"), {"run": run_id}
+        ).scalar_one()
+    logger.info("wrote %d iteration blobs; database now %.1f MB", blobs, size)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
