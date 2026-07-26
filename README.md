@@ -46,7 +46,13 @@ from the code:
   handful of modern races attribute pole to P2.
 - **Indy 500 rounds 1950–60** counted for the World Championship but had no F1
   regulars; they are excluded (11 races).
-- **Shared drives** have no equivalent in the modern points system and are skipped.
+- **Shared drives and car swaps** (1950s) have no equivalent in the modern points
+  system. Where a driver retired one car and took over another, the better of
+  their two results is kept — Fangio is credited with the 1951 French GP win he
+  took in Fagioli's car. Where two drivers *shared* one car and were classified
+  together, only one is credited, so each race still has exactly one winner and
+  at most three podium finishers. This affects 3 wins and 18 podiums across 1,125
+  races.
 
 ## Setup
 
