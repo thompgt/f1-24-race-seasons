@@ -14,6 +14,8 @@ import pytest
 
 from app.sim.continuation import (
     DEFAULT_HALF_LIFE,
+    STATIC_FORM,
+    FormDynamics,
     SeasonForm,
     champion_probability,
     fit_strengths,
@@ -228,6 +230,183 @@ class TestContinuation:
         )
         odds = champion_probability(result["points"], result["wins"], result["podiums"])
         assert odds[1] > odds[0]
+
+
+class TestFormDynamics:
+    """The extra races are a sequence, not a set of independent draws."""
+
+    def test_static_form_is_the_default_and_changes_nothing(self):
+        implicit = simulate_continuation(
+            form(n_races=18),
+            rng=np.random.default_rng(20),
+            n_iterations=400,
+            target_races=24,
+        )
+        explicit = simulate_continuation(
+            form(n_races=18),
+            rng=np.random.default_rng(20),
+            n_iterations=400,
+            target_races=24,
+            dynamics=STATIC_FORM,
+        )
+        assert np.array_equal(implicit["points"], explicit["points"])
+
+    def test_persistence_alone_is_still_static(self):
+        """With nothing to persist, carrying it forward is a no-op."""
+        assert FormDynamics(persistence=0.9).is_static
+
+    def test_volatility_widens_the_spread_of_outcomes(self):
+        """Pace that wanders makes the season less predictable, which is the
+        whole reason a chaser has a route back into it."""
+        fixed = simulate_continuation(
+            form(strength=np.array([4.0, 2.0, 1.0]), n_races=16),
+            rng=np.random.default_rng(21),
+            n_iterations=3000,
+            target_races=24,
+        )
+        drifting = simulate_continuation(
+            form(strength=np.array([4.0, 2.0, 1.0]), n_races=16),
+            rng=np.random.default_rng(21),
+            n_iterations=3000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=0.8, volatility=0.6),
+        )
+        assert drifting["points"].std(axis=0)[0] > fixed["points"].std(axis=0)[0]
+
+    def test_momentum_makes_results_cluster(self):
+        """A driver who wins one extra race should win the next more often than
+        their overall rate — which is what a streak means, and what a model of
+        independent races cannot produce."""
+        streaky = simulate_continuation(
+            form(n_drivers=4, strength=np.ones(4), n_races=16),
+            rng=np.random.default_rng(22),
+            n_iterations=6000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=0.9, momentum=2.5),
+        )
+        flat = simulate_continuation(
+            form(n_drivers=4, strength=np.ones(4), n_races=16),
+            rng=np.random.default_rng(22),
+            n_iterations=6000,
+            target_races=24,
+        )
+        # In an even field nobody gains on average, so a wider spread of win
+        # counts is exactly the clustering and not a change in who is quick.
+        assert streaky["wins"].std() > flat["wins"].std() * 1.1
+        assert streaky["wins"].mean() == pytest.approx(flat["wins"].mean(), rel=0.05)
+
+    def test_an_even_field_stays_even_under_momentum(self):
+        """Momentum must redistribute results, never invent an advantage."""
+        result = simulate_continuation(
+            form(n_drivers=4, strength=np.ones(4), n_races=16),
+            rng=np.random.default_rng(23),
+            n_iterations=4000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=0.85, momentum=2.0),
+        )
+        wins = result["wins"].mean(axis=0)
+        assert wins.max() - wins.min() < 0.25
+
+    def test_the_band_caps_a_runaway_streak(self):
+        gentle = simulate_continuation(
+            form(n_drivers=4, n_races=12),
+            rng=np.random.default_rng(24),
+            n_iterations=2000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=1.0, momentum=4.0, band=0.5),
+        )
+        # Nobody can run away with every remaining race on form alone.
+        assert gentle["wins"].max() < 12
+
+    def test_drift_helps_the_quicker_chaser_more_than_the_leader(self):
+        """The behaviour the whole change exists for: a driver fitted faster but
+        behind on points gains from the season staying live."""
+        setup = dict(
+            points=np.array([260.0, 210.0, 90.0]),
+            strength=np.array([1.0, 2.2, 0.4]),
+            n_races=16,
+        )
+        fixed = simulate_continuation(
+            form(**setup),
+            rng=np.random.default_rng(25),
+            n_iterations=6000,
+            target_races=24,
+        )
+        drifting = simulate_continuation(
+            form(**setup),
+            rng=np.random.default_rng(25),
+            n_iterations=6000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=0.8, volatility=0.5, momentum=1.0),
+        )
+        chaser = lambda r: champion_probability(r["points"], r["wins"], r["podiums"])[1]
+        assert chaser(drifting) > chaser(fixed)
+
+    def test_a_settled_season_stays_settled_under_drift(self):
+        """Drift must not manufacture drama where the points do not allow it."""
+        result = simulate_continuation(
+            form(
+                points=np.array([420.0, 120.0, 60.0]),
+                strength=np.array([3.0, 1.0, 1.0]),
+                n_races=20,
+            ),
+            rng=np.random.default_rng(26),
+            n_iterations=2000,
+            target_races=24,
+            dynamics=FormDynamics(persistence=0.8, volatility=0.6, momentum=1.5),
+        )
+        odds = champion_probability(result["points"], result["wins"], result["podiums"])
+        assert odds[0] == pytest.approx(1.0)
+
+
+class TestLeadShare:
+    def test_it_covers_the_banked_standings_and_every_extra_race(self):
+        result = simulate_continuation(
+            form(points=np.array([50.0, 40.0, 5.0]), n_races=20),
+            rng=np.random.default_rng(30),
+            n_iterations=500,
+            target_races=24,
+        )
+        assert result["lead_share"].shape == (5, 3)  # 4 extra races plus the start
+
+    def test_it_starts_from_who_was_actually_leading(self):
+        result = simulate_continuation(
+            form(points=np.array([50.0, 40.0, 5.0]), n_races=20),
+            rng=np.random.default_rng(31),
+            n_iterations=500,
+            target_races=24,
+        )
+        assert result["lead_share"][0] == pytest.approx(np.array([1.0, 0.0, 0.0]))
+
+    def test_it_ends_on_the_title_odds(self):
+        result = simulate_continuation(
+            form(points=np.array([50.0, 40.0, 5.0]), strength=np.array([1.0, 3.0, 0.2])),
+            rng=np.random.default_rng(32),
+            n_iterations=800,
+            target_races=24,
+        )
+        final = champion_probability(
+            result["points"], result["wins"], result["podiums"]
+        )
+        assert result["lead_share"][-1] == pytest.approx(final)
+
+    def test_every_race_shares_one_leader_between_them(self):
+        result = simulate_continuation(
+            form(n_drivers=5, n_races=18),
+            rng=np.random.default_rng(33),
+            n_iterations=400,
+            target_races=24,
+        )
+        assert result["lead_share"].sum(axis=1) == pytest.approx(np.ones(7))
+
+    def test_a_completed_season_reports_only_its_final_standings(self):
+        result = simulate_continuation(
+            form(n_races=24, points=np.array([9.0, 4.0, 1.0])),
+            rng=np.random.default_rng(34),
+            n_iterations=100,
+            target_races=24,
+        )
+        assert result["lead_share"].shape == (1, 3)
 
 
 class TestChampionProbability:
