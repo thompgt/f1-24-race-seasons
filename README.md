@@ -69,11 +69,19 @@ Source data is the Ergast CSV dump (1950–2024), topped up from the
 Nothing under `data/` is committed — it is rebuilt by these scripts.
 
 ```bash
-python scripts/build_db.py --csv-dir "C:/Users/thoma/F1_points_application"
-python scripts/fetch_jolpica.py --seasons 2025 --sprints 2021-2025
+python scripts/fetch_jolpica.py        # caches 2025-26 + sprints under data/raw/
+python scripts/build_db.py             # CSV dump + cached Jolpica -> data/f1.db
 python scripts/run_simulations.py --iterations 10000 --seed 20240424
 python scripts/verify_data.py          # data-quality report
 ```
+
+`fetch_jolpica.py` is the only step that needs network access; once cached, the
+database rebuilds offline. Pass `--refresh` to re-pull a season still in
+progress, and `--skip-jolpica` to `build_db.py` to build from the CSV dump alone.
+
+A season still under way is ingested as a projection: it is shown in the Seasons
+tab clearly marked in progress, carries no champion, and is left out of the
+all-time leaderboards.
 
 ## Running
 

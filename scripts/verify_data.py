@@ -130,10 +130,20 @@ def main() -> int:
 
         section("Champions")
         rule(
-            "seasons missing an actual champion",
-            one("SELECT COUNT(*) FROM seasons WHERE actual_champion_driver_id IS NULL"),
+            "completed seasons missing an actual champion",
+            one(
+                """SELECT COUNT(*) FROM seasons
+                   WHERE is_complete = 1 AND actual_champion_driver_id IS NULL"""
+            ),
             0,
         )
+        for row in q(
+            "SELECT year, n_races FROM seasons WHERE is_complete = 0 ORDER BY year"
+        ).all():
+            print(
+                f"  note: {row.year} is still in progress ({row.n_races} races run) — "
+                "shown as a projection, and excluded from all-time leaderboards"
+            )
         print("  seasons where the modern scale alone changes the title:")
         changed = 0
         for row in q(

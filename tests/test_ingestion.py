@@ -9,9 +9,12 @@ from __future__ import annotations
 from tests.conftest import scalar
 
 
-def test_every_season_from_1950_to_2024_is_present(db):
+def test_seasons_are_contiguous_from_1950(db):
     years = [row[0] for row in db.exec_driver_sql("SELECT year FROM seasons ORDER BY year")]
-    assert years == list(range(1950, 2025))
+    assert years[0] == 1950
+    assert years == list(range(years[0], years[-1] + 1))
+    # The CSV dump ends at 2024; anything beyond it came from Jolpica.
+    assert years[-1] >= 2024
 
 
 def test_indy_500_rounds_are_excluded(db):
@@ -155,7 +158,10 @@ def test_fastest_lap_data_only_exists_from_2004(db):
 
 
 def test_known_win_totals_match_the_real_record(db):
-    """A sanity anchor against the actual historical record."""
+    """A sanity anchor against the actual historical record.
+
+    Bounded at 2024, the totals these published figures were quoted for.
+    """
     wins = dict(
         db.exec_driver_sql(
             """
@@ -163,7 +169,7 @@ def test_known_win_totals_match_the_real_record(db):
             FROM race_results rr
             JOIN drivers d ON d.driver_id = rr.driver_id
             JOIN races r ON r.race_id = rr.race_id
-            WHERE r.excluded = 0
+            WHERE r.excluded = 0 AND r.year <= 2024
             GROUP BY d.driver_ref
             """
         ).all()
@@ -187,7 +193,8 @@ def test_shared_drive_wins_go_to_the_historically_credited_driver(db):
             FROM race_results rr
             JOIN drivers d ON d.driver_id = rr.driver_id
             JOIN races r ON r.race_id = rr.race_id
-            WHERE r.excluded = 0 AND d.driver_ref IN ('fangio', 'moss', 'ascari')
+            WHERE r.excluded = 0 AND r.year <= 2024
+              AND d.driver_ref IN ('fangio', 'moss', 'ascari')
             GROUP BY d.driver_ref
             """
         ).all()
@@ -203,7 +210,7 @@ def test_known_podium_totals_match_the_real_record(db):
             FROM race_results rr
             JOIN drivers d ON d.driver_id = rr.driver_id
             JOIN races r ON r.race_id = rr.race_id
-            WHERE r.excluded = 0
+            WHERE r.excluded = 0 AND r.year <= 2024
               AND d.driver_ref IN ('hamilton', 'michael_schumacher', 'fangio', 'moss')
             GROUP BY d.driver_ref
             """
@@ -217,9 +224,14 @@ def test_known_podium_totals_match_the_real_record(db):
     }
 
 
-def test_every_season_has_an_actual_champion(db):
+def test_every_completed_season_has_an_actual_champion(db):
+    """In-progress seasons are exempt — see tests/test_jolpica.py."""
     missing = scalar(
-        db, "SELECT COUNT(*) FROM seasons WHERE actual_champion_driver_id IS NULL"
+        db,
+        """
+        SELECT COUNT(*) FROM seasons
+        WHERE is_complete = 1 AND actual_champion_driver_id IS NULL
+        """,
     )
     assert missing == 0
 
