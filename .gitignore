@@ -1,0 +1,26 @@
+# Data — rebuilt by scripts, never committed
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Env / editor
+.env
+.DS_Store
+.idea/
+.vscode/
