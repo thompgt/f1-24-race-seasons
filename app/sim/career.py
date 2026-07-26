@@ -49,6 +49,23 @@ class Summary:
     p97_5: float
     std: float
 
+    def divided_by(self, divisor: float) -> Summary:
+        """Rescale a summary computed from fixed-point draws into real units.
+
+        Every field here is a linear statistic of the draws, so dividing them is
+        the same as dividing the draws first — see `METRIC_SCALES` in
+        `app.sim.bootstrap` for why quality wins are stored as hundredths.
+        """
+        if divisor == 1:
+            return self
+        return Summary(
+            mean=self.mean / divisor,
+            median=self.median / divisor,
+            p2_5=self.p2_5 / divisor,
+            p97_5=self.p97_5 / divisor,
+            std=self.std / divisor,
+        )
+
     @classmethod
     def of(cls, draws: np.ndarray) -> Summary:
         p2_5, median, p97_5 = np.percentile(draws, [2.5, 50.0, 97.5])

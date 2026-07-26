@@ -19,10 +19,26 @@ import numpy as np
 
 #: Metrics carried per driver. Each is additive over races, which is the property
 #: the bootstrap depends on.
-DRIVER_METRICS = ("points", "points_no_fl", "sprint_points", "wins", "podiums", "poles", "entries")
+#:
+#: `quality_wins` is a win weighted by how contested it was — see `app.sim.elo`.
+#: It is additive over races exactly like a raw win, so it needs nothing special
+#: here and is bootstrapped by the same matrix multiply. That composition is the
+#: point: the two corrections this app makes (opportunity, and difficulty) are
+#: independent, and applying both answers "how many *contested* wins would this
+#: driver have taken over a modern calendar".
+DRIVER_METRICS = (
+    "points",
+    "points_no_fl",
+    "sprint_points",
+    "wins",
+    "quality_wins",
+    "podiums",
+    "poles",
+    "entries",
+)
 
 #: Constructors have no pole or entry concept worth reporting separately.
-CONSTRUCTOR_METRICS = ("points", "points_no_fl", "sprint_points", "wins", "podiums")
+CONSTRUCTOR_METRICS = ("points", "points_no_fl", "sprint_points", "wins", "quality_wins", "podiums")
 
 
 @dataclass(frozen=True)
@@ -105,10 +121,17 @@ def build_event_set(
 
     # np.add.at rather than fancy-index assignment: a driver can appear only once
     # per race, but constructors have two cars, so their rows must accumulate.
+    # A season built without Elo ratings yet — as the ingest tests do — simply
+    # carries no quality credit, and the metric stays zero rather than erroring.
+    quality = rows.get("quality_win")
+    if quality is None:
+        quality = np.zeros(len(race_pos), dtype=np.float32)
+
     for metric, values in (
         ("points", rows["points"]),
         ("points_no_fl", rows["points_no_fl"]),
         ("wins", rows["is_win"]),
+        ("quality_wins", quality),
         ("podiums", rows["is_podium"]),
     ):
         np.add.at(driver_mats[metric], (race_pos, driver_pos), np.asarray(values, dtype=np.float32))
@@ -126,6 +149,7 @@ def build_event_set(
         ("points", rows["points"]),
         ("points_no_fl", rows["points_no_fl"]),
         ("wins", rows["is_win"]),
+        ("quality_wins", quality),
         ("podiums", rows["is_podium"]),
     ):
         np.add.at(

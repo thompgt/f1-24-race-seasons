@@ -54,6 +54,11 @@ class SeasonDriverSim(Base):
     actual_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_points_no_fl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    #: Wins weighted by how contested they were — see `app.sim.elo`. Normalised
+    #: so the average win in history is worth 1.0, which keeps this directly
+    #: comparable with the raw win columns beside it.
+    actual_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_poles: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
@@ -61,6 +66,7 @@ class SeasonDriverSim(Base):
     scaled_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_points_no_fl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    scaled_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_poles: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
@@ -73,6 +79,11 @@ class SeasonDriverSim(Base):
     wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    quality_wins_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     podiums_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     podiums_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -108,10 +119,16 @@ class SeasonConstructorSim(Base):
 
     actual_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    #: Wins weighted by how contested they were — see `app.sim.elo`. Normalised
+    #: so the average win in history is worth 1.0, which keeps this directly
+    #: comparable with the raw win columns beside it.
+    actual_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     scaled_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    scaled_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     points_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -123,6 +140,11 @@ class SeasonConstructorSim(Base):
     wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    quality_wins_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     podiums_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     podiums_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -183,12 +205,18 @@ class CareerDriverSim(Base):
     actual_races: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     actual_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    #: Wins weighted by how contested they were — see `app.sim.elo`. Normalised
+    #: so the average win in history is worth 1.0, which keeps this directly
+    #: comparable with the raw win columns beside it.
+    actual_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_poles: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     actual_championships: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     scaled_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    scaled_quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_podiums: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_poles: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     scaled_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -197,6 +225,11 @@ class CareerDriverSim(Base):
     wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    quality_wins_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality_wins_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     podiums_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     podiums_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

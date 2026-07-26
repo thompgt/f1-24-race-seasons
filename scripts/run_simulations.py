@@ -30,6 +30,7 @@ from app.services.event_source import list_seasons, load_season_events  # noqa: 
 from app.sim.bootstrap import (  # noqa: E402
     DEFAULT_ITERATIONS,
     DEFAULT_TARGET_RACES,
+    scale_of,
     simulate_season,
     summarise,
 )
@@ -38,15 +39,19 @@ from app.sim.career import Summary, aggregate_group, encode_draws, probability_a
 logger = logging.getLogger("run_simulations")
 
 #: Metrics whose per-iteration draws are persisted and rolled up into careers.
-PERSISTED_DRIVER_METRICS = ("points", "points_no_fl", "wins", "podiums", "poles", "entries")
-PERSISTED_CONSTRUCTOR_METRICS = ("points", "points_no_fl", "wins", "podiums")
+PERSISTED_DRIVER_METRICS = (
+    "points", "points_no_fl", "wins", "quality_wins", "podiums", "poles", "entries",
+)
+PERSISTED_CONSTRUCTOR_METRICS = ("points", "points_no_fl", "wins", "quality_wins", "podiums")
 
 #: Grouping dimensions offered by the historical tab. Decade and era are served
 #: by the year-range filter instead: summing every driver's wins within a decade
 #: would just return 24 x the number of seasons, which says nothing.
 GROUP_DIMENSIONS = ("constructor", "driver_nationality", "constructor_nationality")
 
-CAREER_METRICS = ("points", "points_no_fl", "wins", "podiums", "poles", "championships")
+CAREER_METRICS = (
+    "points", "points_no_fl", "wins", "quality_wins", "podiums", "poles", "championships",
+)
 TITLE_THRESHOLDS = range(1, 11)
 
 
@@ -62,6 +67,11 @@ def _quantile_columns(prefix: str, draws: np.ndarray) -> dict[str, float]:
         f"{prefix}_p2_5": stats["p2_5"],
         f"{prefix}_p97_5": stats["p97_5"],
     }
+
+
+def _career_summary(metric: str, draws: np.ndarray) -> Summary:
+    """Summarise career draws, converting fixed-point metrics back to real units."""
+    return Summary.of(draws).divided_by(scale_of(metric))
 
 
 def _summary_columns(prefix: str, summary: Summary) -> dict[str, float]:
@@ -118,18 +128,20 @@ def run_season(
             "actual_points": float(driver.actual["points"][i]),
             "actual_points_no_fl": float(driver.actual["points_no_fl"][i]),
             "actual_wins": float(driver.actual["wins"][i]),
+            "actual_quality_wins": float(driver.actual["quality_wins"][i]),
             "actual_podiums": float(driver.actual["podiums"][i]),
             "actual_poles": float(driver.actual["poles"][i]),
             "scaled_points": float(driver.scaled["points"][i]),
             "scaled_points_no_fl": float(driver.scaled["points_no_fl"][i]),
             "scaled_wins": float(driver.scaled["wins"][i]),
+            "scaled_quality_wins": float(driver.scaled["quality_wins"][i]),
             "scaled_podiums": float(driver.scaled["podiums"][i]),
             "scaled_poles": float(driver.scaled["poles"][i]),
             "p_champion": float(champion_probability[i]),
             "p_top3": float(top3_probability[i]),
             "actual_position": actual_positions.get(int(driver_id)),
         }
-        for metric in ("points", "wins", "podiums", "poles"):
+        for metric in ("points", "wins", "quality_wins", "podiums", "poles"):
             row.update(
                 {k: float(v[i]) for k, v in _quantile_columns(metric, driver.totals[metric]).items()}
             )
@@ -153,13 +165,15 @@ def run_season(
             "constructor_id": int(constructor_id),
             "actual_points": float(constructor_sim.actual["points"][i]),
             "actual_wins": float(constructor_sim.actual["wins"][i]),
+            "actual_quality_wins": float(constructor_sim.actual["quality_wins"][i]),
             "actual_podiums": float(constructor_sim.actual["podiums"][i]),
             "scaled_points": float(constructor_sim.scaled["points"][i]),
             "scaled_wins": float(constructor_sim.scaled["wins"][i]),
+            "scaled_quality_wins": float(constructor_sim.scaled["quality_wins"][i]),
             "scaled_podiums": float(constructor_sim.scaled["podiums"][i]),
             "p_champion": float(constructor_champion[i]),
         }
-        for metric in ("points", "wins", "podiums"):
+        for metric in ("points", "wins", "quality_wins", "podiums"):
             row.update(
                 {
                     k: float(v[i])
@@ -257,8 +271,8 @@ def write_careers(conn, run_id: int, retained: dict, args) -> int:
             "actual_races": 0,
             "actual_championships": int(actual_titles.get(driver_id, 0)),
         }
-        for metric in ("wins", "podiums", "poles", "points", "championships"):
-            row.update(_summary_columns(metric, Summary.of(career[metric])))
+        for metric in ("wins", "quality_wins", "podiums", "poles", "points", "championships"):
+            row.update(_summary_columns(metric, _career_summary(metric, career[metric])))
         row["championships_at_least"] = json.dumps(
             probability_at_least(career["championships"], TITLE_THRESHOLDS)
         )
@@ -274,8 +288,10 @@ def write_careers(conn, run_id: int, retained: dict, args) -> int:
                    SUM(sds.actual_races) AS races,
                    SUM(sds.actual_wins) AS wins, SUM(sds.actual_podiums) AS podiums,
                    SUM(sds.actual_poles) AS poles, SUM(sds.actual_points_no_fl) AS points,
+                   SUM(sds.actual_quality_wins) AS quality_wins,
                    SUM(sds.scaled_wins) AS s_wins, SUM(sds.scaled_podiums) AS s_podiums,
-                   SUM(sds.scaled_poles) AS s_poles, SUM(sds.scaled_points_no_fl) AS s_points
+                   SUM(sds.scaled_poles) AS s_poles, SUM(sds.scaled_points_no_fl) AS s_points,
+                   SUM(sds.scaled_quality_wins) AS s_quality_wins
             FROM season_driver_sim sds
             JOIN seasons s ON s.year = sds.year AND s.is_complete = 1
             WHERE sds.run_id = :run
@@ -291,10 +307,12 @@ def write_careers(conn, run_id: int, retained: dict, args) -> int:
             {
                 "actual_races": int(actual.races),
                 "actual_wins": float(actual.wins),
+                "actual_quality_wins": float(actual.quality_wins),
                 "actual_podiums": float(actual.podiums),
                 "actual_poles": float(actual.poles),
                 "actual_points": float(actual.points),
                 "scaled_wins": float(actual.s_wins),
+                "scaled_quality_wins": float(actual.s_quality_wins),
                 "scaled_podiums": float(actual.s_podiums),
                 "scaled_poles": float(actual.s_poles),
                 "scaled_points": float(actual.s_points),
@@ -318,6 +336,7 @@ def _actual_and_scaled_totals(conn, run_id: int) -> dict[tuple[str, int, str], t
             """
             SELECT sds.driver_id AS id,
                    SUM(sds.actual_wins) AS a_wins, SUM(sds.scaled_wins) AS s_wins,
+                   SUM(sds.actual_quality_wins) AS a_qw, SUM(sds.scaled_quality_wins) AS s_qw,
                    SUM(sds.actual_podiums) AS a_pod, SUM(sds.scaled_podiums) AS s_pod,
                    SUM(sds.actual_poles) AS a_pol, SUM(sds.scaled_poles) AS s_pol,
                    SUM(sds.actual_points_no_fl) AS a_pts,
@@ -330,6 +349,7 @@ def _actual_and_scaled_totals(conn, run_id: int) -> dict[tuple[str, int, str], t
         {"run": run_id},
     ).all():
         totals[("driver", int(row.id), "wins")] = (row.a_wins, row.s_wins)
+        totals[("driver", int(row.id), "quality_wins")] = (row.a_qw, row.s_qw)
         totals[("driver", int(row.id), "podiums")] = (row.a_pod, row.s_pod)
         totals[("driver", int(row.id), "poles")] = (row.a_pol, row.s_pol)
         totals[("driver", int(row.id), "points")] = (row.a_pts, row.s_pts)
@@ -340,6 +360,7 @@ def _actual_and_scaled_totals(conn, run_id: int) -> dict[tuple[str, int, str], t
             """
             SELECT scs.constructor_id AS id,
                    SUM(scs.actual_wins) AS a_wins, SUM(scs.scaled_wins) AS s_wins,
+                   SUM(scs.actual_quality_wins) AS a_qw, SUM(scs.scaled_quality_wins) AS s_qw,
                    SUM(scs.actual_podiums) AS a_pod, SUM(scs.scaled_podiums) AS s_pod,
                    SUM(scs.actual_points) AS a_pts, SUM(scs.scaled_points) AS s_pts
             FROM season_constructor_sim scs
@@ -350,6 +371,7 @@ def _actual_and_scaled_totals(conn, run_id: int) -> dict[tuple[str, int, str], t
         {"run": run_id},
     ).all():
         totals[("constructor", int(row.id), "wins")] = (row.a_wins, row.s_wins)
+        totals[("constructor", int(row.id), "quality_wins")] = (row.a_qw, row.s_qw)
         totals[("constructor", int(row.id), "podiums")] = (row.a_pod, row.s_pod)
         totals[("constructor", int(row.id), "points")] = (row.a_pts, row.s_pts)
         totals[("constructor", int(row.id), "points_no_fl")] = (row.a_pts, row.s_pts)
@@ -407,7 +429,7 @@ def write_groups(conn, run_id: int, retained: dict, args) -> int:
     for dimension, groups in memberships.items():
         # Constructors have no pole or entry columns of their own.
         metrics = (
-            ("wins", "podiums", "points", "points_no_fl", "championships")
+            ("wins", "quality_wins", "podiums", "points", "points_no_fl", "championships")
             if dimension != "driver_nationality"
             else CAREER_METRICS
         )
@@ -430,6 +452,7 @@ def write_groups(conn, run_id: int, retained: dict, args) -> int:
                 if not vectors:
                     continue
                 summary, _ = aggregate_group(vectors)
+                summary = summary.divided_by(scale_of(metric))
                 rows.append(
                     {
                         "run_id": run_id,

@@ -22,6 +22,7 @@ from app.core.database import Base  # noqa: E402
 from app.ingestion.csv_loader import load_source_frames  # noqa: E402
 from app.ingestion.normalize import IdRegistry, load_jolpica_frames  # noqa: E402
 from app.models import source as _source  # noqa: E402,F401  (registers tables)
+from scripts.build_elo import build as build_elo  # noqa: E402
 
 logger = logging.getLogger("build_db")
 
@@ -129,6 +130,11 @@ def main() -> int:
         action="store_true",
         help="build from the CSV dump alone, stopping at 2024",
     )
+    parser.add_argument(
+        "--skip-elo",
+        action="store_true",
+        help="skip rating drivers; quality-adjusted wins will all be zero",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -162,6 +168,14 @@ def main() -> int:
             seasons=JOLPICA_SEASONS,
             sprint_seasons=JOLPICA_SPRINT_SEASONS,
         )
+
+    if args.skip_elo:
+        logger.info("Skipping Elo build; quality_win stays zero for every result")
+    else:
+        # Ratings depend only on the ingested results, and run_simulations.py
+        # reads quality_win off them, so this has to happen before any run.
+        logger.info("Rating drivers and scoring win difficulty")
+        build_elo(engine)
 
     summarise(engine)
 

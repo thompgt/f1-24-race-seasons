@@ -129,6 +129,18 @@ class RaceResult(Base):
     is_win: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_podium: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    #: How contested this win was, normalised so the average win in history is
+    #: worth 1.0; zero for anything that was not a win. Written by
+    #: `scripts/build_elo.py` from pre-race ratings — see `app.sim.elo`.
+    #:
+    #: `server_default` rather than a Python-side default because the ingest
+    #: writes this table through pandas `to_sql`, which names its columns
+    #: explicitly and never sees SQLAlchemy's defaults. The value has to come
+    #: from the DDL or the insert fails on the NOT NULL.
+    quality_win: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default="0"
+    )
+
 
 Index("idx_race_results_driver", RaceResult.driver_id)
 
@@ -163,3 +175,75 @@ class Qualifying(Base):
         Integer, ForeignKey("drivers.driver_id"), primary_key=True
     )
     position: Mapped[int | None] = mapped_column(Integer)
+
+
+class DriverRaceRating(Base):
+    """Elo ratings carried into and out of every race, per driver.
+
+    One row per entry — around 27,000 in total, which is small enough to store
+    outright and makes the rating traces on driver pages a single indexed read
+    rather than a replay of the whole history.
+
+    Written by `scripts/build_elo.py`. Unlike the simulation tables this carries
+    no `run_id`: ratings are a deterministic function of the source results, so
+    there is only ever one version of them for a given database.
+    """
+
+    __tablename__ = "driver_race_ratings"
+
+    race_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("races.race_id"), primary_key=True
+    )
+    driver_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("drivers.driver_id"), primary_key=True
+    )
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    rating_before: Mapped[float] = mapped_column(Float, nullable=False)
+    rating_after: Mapped[float] = mapped_column(Float, nullable=False)
+    teammate_rating_before: Mapped[float] = mapped_column(Float, nullable=False)
+    teammate_rating_after: Mapped[float] = mapped_column(Float, nullable=False)
+    #: Margin over the mean rating of this race's field. Raw ratings drift upward
+    #: across eras, so cross-era comparisons use this instead.
+    rating_vs_field: Mapped[float] = mapped_column(Float, nullable=False)
+    #: Where the pre-race ratings expected this driver to finish. The basis of
+    #: `RaceResult.quality_win`.
+    expected_position: Mapped[float] = mapped_column(Float, nullable=False)
+    position: Mapped[int | None] = mapped_column(Integer)
+
+
+Index("idx_driver_race_ratings_driver", DriverRaceRating.driver_id)
+Index("idx_driver_race_ratings_year", DriverRaceRating.year)
+
+
+class DriverElo(Base):
+    """Career rating summary per driver, rolled up from the per-race ratings."""
+
+    __tablename__ = "driver_elo"
+
+    driver_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("drivers.driver_id"), primary_key=True
+    )
+    races: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    first_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_year: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    #: Best sustained level over a rolling window, not the highest single race.
+    peak_rating: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    peak_teammate_rating: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    #: The era-neutral one. Rank cross-era tables on this, not `peak_rating`.
+    peak_vs_field: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    final_rating: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    final_teammate_rating: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    #: Wins, their summed difficulty credit, and the resulting average. Kept here
+    #: as well as in the simulation tables because they describe what actually
+    #: happened, independently of any 24-race run.
+    wins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quality_wins: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    mean_win_difficulty: Mapped[float | None] = mapped_column(Float)
+    #: Team-mate head-to-head record on classified finishes, for context on the
+    #: team-mate rating.
+    teammate_races: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    teammate_wins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

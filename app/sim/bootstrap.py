@@ -38,7 +38,21 @@ _METRIC_DTYPES = {
     "points": np.uint16,
     "points_no_fl": np.uint16,
     "sprint_points": np.uint16,
+    "quality_wins": np.uint16,
 }
+
+#: Metrics stored as fixed-point integers, with the divisor needed to read them
+#: back. Quality wins are fractional — a win is worth 0.35 to 2.6 — and storing
+#: them as float32 would quadruple the blob for that metric and compress far
+#: worse, since float mantissas are close to incompressible. Two decimal places
+#: is finer than anything the app displays, and 24 races x 2.6 x 100 leaves plenty
+#: of headroom in a uint16.
+METRIC_SCALES = {"quality_wins": 100}
+
+
+def scale_of(metric: str) -> int:
+    """Divisor to turn stored draws for `metric` back into real units."""
+    return METRIC_SCALES.get(metric, 1)
 
 
 @dataclass(frozen=True)
@@ -66,8 +80,12 @@ class EntitySimResult:
         return counts
 
     def iteration_draws(self, metric: str) -> np.ndarray:
-        """Per-iteration totals for one metric, in compact integer form."""
-        return np.rint(self.totals[metric]).astype(_METRIC_DTYPES[metric])
+        """Per-iteration totals for one metric, in compact integer form.
+
+        Fixed-point metrics are multiplied by their scale on the way in; anything
+        reading these blobs back must divide by `scale_of(metric)`.
+        """
+        return np.rint(self.totals[metric] * scale_of(metric)).astype(_METRIC_DTYPES[metric])
 
     def championship_draws(self) -> np.ndarray:
         """(N, E) uint8 indicator of who took the title in each iteration."""

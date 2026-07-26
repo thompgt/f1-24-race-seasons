@@ -24,7 +24,7 @@ _RACES = text(
 _RESULTS = text(
     """
     SELECT rr.race_id, rr.driver_id, rr.constructor_id,
-           rr.points, rr.points_no_fl, rr.is_win, rr.is_podium
+           rr.points, rr.points_no_fl, rr.is_win, rr.is_podium, rr.quality_win
     FROM race_results rr
     JOIN races r ON r.race_id = rr.race_id
     WHERE r.year = :year AND r.excluded = 0
@@ -65,6 +65,7 @@ def load_season_events(conn: Connection, year: int) -> SeasonEventSet:
         "points_no_fl": np.array([r.points_no_fl for r in results], dtype=np.float32),
         "is_win": np.array([r.is_win for r in results], dtype=np.float32),
         "is_podium": np.array([r.is_podium for r in results], dtype=np.float32),
+        "quality_win": np.array([r.quality_win for r in results], dtype=np.float32),
     }
 
     sprints = conn.execute(_SPRINTS, {"year": year}).all()
