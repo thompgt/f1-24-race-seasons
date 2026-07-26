@@ -276,3 +276,50 @@ class GroupSim(Base):
 
 
 Index("idx_group_sim_lookup", GroupSim.run_id, GroupSim.dimension, GroupSim.metric)
+
+
+class SeasonContinuationSim(Base):
+    """Per-driver outcome of racing out the rest of a season.
+
+    The bootstrap in `season_driver_sim` resamples the races that happened, so a
+    driver's expected total is exactly `actual x 24/R` and the championship
+    margin scales with it. This table holds the other model: the R races that
+    happened are kept, and the remaining `24 - R` are raced out from each
+    driver's end-of-season form. It is the one that can hand a title to whoever
+    was quickest at the end rather than whoever led when the calendar ran out.
+
+    Empty of interest for a season that already ran the full distance — there is
+    nothing left to race, so `p_champion` is 1.0 for the actual champion.
+    """
+
+    __tablename__ = "season_continuation_sim"
+
+    run_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    driver_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    #: Races added to reach the target length. Zero means nothing was simulated.
+    extra_races: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    #: Modern-points total already banked over the races actually run.
+    banked_points: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    #: Fitted end-of-season strength, relative to a reference of 1.0. Averaged
+    #: over the uncertainty ensemble.
+    form_strength: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    points_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    points_median: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    points_p2_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    points_p97_5: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    wins_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    podiums_mean: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    p_champion: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+Index(
+    "idx_season_continuation_year",
+    SeasonContinuationSim.run_id,
+    SeasonContinuationSim.year,
+)

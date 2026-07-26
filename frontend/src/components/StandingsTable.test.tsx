@@ -71,6 +71,8 @@ function row(options: RowOptions): SeasonDriverRow {
     entries_p2_5: races * factor,
     entries_p97_5: races * factor,
     p_champion: pChampion,
+    p_champion_continued: pChampion,
+    form_strength: 1,
     p_top3: 0.9,
     is_actual_champion: isChampion,
     is_part_season: isPartSeason,

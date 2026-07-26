@@ -78,7 +78,11 @@ export default function SeasonPage() {
             </p>
           )}
 
-          <ChampionOddsPanel rows={season.data.drivers} targetRaces={season.data.target_races} />
+          <ChampionOddsPanel
+            rows={season.data.drivers}
+            targetRaces={season.data.target_races}
+            seasonRaces={season.data.n_races}
+          />
 
           {season.data.drivers.length === 0 ? (
             <EmptyState message="No results recorded for this season." />

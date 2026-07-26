@@ -11,9 +11,38 @@
 }
 
 .odds-note {
+  max-width: 78ch;
   margin: 6px 0 0;
   font-size: 14px;
   color: var(--text-primary);
+}
+
+.odds-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.odds-legend .key {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.odds-legend .key:not(:first-child) {
+  margin-left: 14px;
+}
+
+.key-resample {
+  background: var(--series-sim);
+}
+
+.key-continue {
+  background: var(--series-actual);
 }
 
 .odds ul {
@@ -24,12 +53,20 @@
   gap: 7px;
 }
 
+.odds ul.odds-paired {
+  gap: 11px;
+}
+
 .odds li {
   display: grid;
   grid-template-columns: minmax(120px, 200px) 1fr 52px;
   align-items: center;
   gap: 12px;
   font-size: 14px;
+}
+
+.odds-paired li {
+  grid-template-columns: minmax(120px, 200px) 1fr 56px;
 }
 
 .odds-name {
@@ -47,6 +84,13 @@
   font-size: 11px;
 }
 
+/* Two tracks stacked with a surface gap between them, so the pair reads as one
+   driver's row rather than two unrelated bars. */
+.odds-bars {
+  display: grid;
+  gap: 3px;
+}
+
 .odds-track {
   height: 8px;
   background: var(--surface-sunken);
@@ -62,25 +106,43 @@
 }
 
 /*
- * The real champion's bar takes the second categorical slot, so "what happened"
- * and "what the simulation prefers" are distinguishable at a glance. The text
- * label carries the same information, so hue is never the only channel.
+ * The two models take the first two categorical slots. The percentage is printed
+ * for both on every row, so hue is never the only channel carrying the value.
  */
-.odds-fill.is-actual {
+.odds-fill.is-resample {
+  background: var(--series-sim);
+}
+
+.odds-fill.is-continue {
   background: var(--series-actual);
 }
 
-.odds-value {
+.odds-values {
+  display: grid;
+  gap: 3px;
   text-align: right;
   color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.odds-continue-value {
+  color: var(--text-muted);
+}
+
+.odds-footnote {
+  max-width: 72ch;
+  margin: 14px 0 0;
+  font-size: 12px;
 }
 
 @media (max-width: 560px) {
-  .odds li {
-    grid-template-columns: 1fr 44px;
+  .odds li,
+  .odds-paired li {
+    grid-template-columns: 1fr 52px;
   }
 
-  .odds-track {
+  .odds-bars {
     grid-column: 1 / -1;
   }
 }

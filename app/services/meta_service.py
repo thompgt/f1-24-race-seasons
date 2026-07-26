@@ -87,6 +87,19 @@ async def build_meta(db: AsyncSession, run: RunInfo) -> Meta:
             ),
         ),
         MethodStep(
+            title="Or race out the rest of the season instead",
+            detail=(
+                "Resampling scales a season, which scales the championship margin "
+                "with it, so the leader stays the leader and simply wins by more. "
+                "The second model keeps the races that happened and races out the "
+                "remainder from each driver's end-of-season form — fitted with "
+                "recent races weighted most, and with entry and retirement rates "
+                "carried over. It is the model that can hand a title to whoever was "
+                "quickest at the finish rather than whoever led when the calendar "
+                "ran out, and the two disagree on eleven seasons."
+            ),
+        ),
+        MethodStep(
             title="Weigh each win by who had to be beaten",
             detail=(
                 "An Elo rating is built from every pairwise result in the record, and "
@@ -99,6 +112,30 @@ async def build_meta(db: AsyncSession, run: RunInfo) -> Meta:
     ]
 
     caveats = [
+        Caveat(
+            key="continuation_scope",
+            title="Continuing a season says nothing about a full-length one",
+            detail=(
+                "A season that already ran the target distance has no remainder to "
+                "race, so that model returns exactly what happened and reports the "
+                "real champion at 100%. It is a statement about seasons cut short by "
+                "the calendar, not a general one — which is why career and all-time "
+                "figures come from the resampling model, whose expected totals are "
+                "exact and comparable across every era."
+            ),
+        ),
+        Caveat(
+            key="continuation_form",
+            title="End-of-season form is an estimate, not a fact",
+            detail=(
+                "Strengths are fitted from finishing orders with recent races "
+                "weighted most, which is a judgement about how quickly form decays "
+                "rather than something the data settles. They are refitted on "
+                "bootstrap resamples of the season so the odds carry that "
+                "uncertainty, but a driver whose car was about to be upgraded — or "
+                "who was about to lose it — is not something any fit can know."
+            ),
+        ),
         Caveat(
             key="elo_drift",
             title="Raw Elo ratings drift upward across eras",

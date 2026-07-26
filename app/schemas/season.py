@@ -54,6 +54,11 @@ class SeasonDriverRow(BaseModel):
     entries_p2_5: float
     entries_p97_5: float
     p_champion: float
+    #: Title odds under the continuation model — see `ChampionOdds`. Null where
+    #: the season already ran the full distance.
+    p_champion_continued: float | None = None
+    #: Fitted end-of-season pace, relative to a reference competitor at 1.0.
+    form_strength: float = 0.0
     p_top3: float
     is_actual_champion: bool = False
     #: Flagged in the UI: this driver contested less than half the season.
@@ -93,6 +98,23 @@ class SeasonDetail(BaseModel):
 
 
 class ChampionOdds(BaseModel):
+    """Title odds under both models, which frequently disagree.
+
+    `p_champion` resamples the races that happened, so it asks what this
+    season's form implies over 24 races. `p_champion_continued` keeps those
+    races and races out the remainder from end-of-season form, so it asks who
+    would have won had the calendar not run out. The first cannot really take a
+    title off the leader — its expected totals scale the margin — while the
+    second can, and does in eleven seasons.
+    """
+
     driver: DriverRef
     p_champion: float
+    #: Null where the season already ran the full distance: there is nothing
+    #: left to race, so the model has nothing to say.
+    p_champion_continued: float | None = None
+    #: Modern-points total banked over the races actually run.
+    banked_points: float = 0.0
+    #: Fitted end-of-season pace, relative to a reference competitor at 1.0.
+    form_strength: float = 0.0
     is_actual_champion: bool

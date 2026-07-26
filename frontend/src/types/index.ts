@@ -75,6 +75,8 @@ export interface SeasonDriverRow {
   entries_p2_5: number
   entries_p97_5: number
   p_champion: number
+  p_champion_continued: number | null
+  form_strength: number
   p_top3: number
   is_actual_champion: boolean
   is_part_season: boolean
@@ -115,6 +117,9 @@ export interface SeasonDetail {
 export interface ChampionOdds {
   driver: DriverRef
   p_champion: number
+  p_champion_continued: number | null
+  banked_points: number
+  form_strength: number
   is_actual_champion: boolean
 }
 

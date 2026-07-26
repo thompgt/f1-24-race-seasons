@@ -148,10 +148,15 @@ async def get_season(db: AsyncSession, year: int, run: RunInfo) -> SeasonDetail 
             text(
                 """
                 SELECT sds.*, d.forename, d.surname, d.code, d.nationality,
-                       c.name AS constructor_name, c.nationality AS constructor_nationality
+                       c.name AS constructor_name, c.nationality AS constructor_nationality,
+                       cont.p_champion AS p_continued, cont.extra_races,
+                       cont.form_strength
                 FROM season_driver_sim sds
                 JOIN drivers d ON d.driver_id = sds.driver_id
                 LEFT JOIN constructors c ON c.constructor_id = sds.constructor_id
+                LEFT JOIN season_continuation_sim cont
+                  ON cont.run_id = sds.run_id AND cont.year = sds.year
+                 AND cont.driver_id = sds.driver_id
                 WHERE sds.run_id = :run AND sds.year = :year
                 ORDER BY sds.points_median DESC, sds.wins_median DESC
                 """
@@ -207,6 +212,10 @@ async def get_season(db: AsyncSession, year: int, run: RunInfo) -> SeasonDetail 
             entries_p2_5=row.entries_p2_5,
             entries_p97_5=row.entries_p97_5,
             p_champion=row.p_champion,
+            p_champion_continued=(
+                row.p_continued if (row.extra_races or 0) > 0 else None
+            ),
+            form_strength=row.form_strength or 0.0,
             p_top3=row.p_top3,
             is_actual_champion=bool(champion and champion.driver_id == row.driver_id),
             is_part_season=row.actual_races < PART_SEASON_THRESHOLD * season.n_races,
@@ -277,11 +286,17 @@ async def champion_odds(db: AsyncSession, year: int, run: RunInfo) -> list[Champ
             text(
                 """
                 SELECT sds.driver_id, sds.p_champion, d.forename, d.surname, d.code,
-                       d.nationality, s.actual_champion_driver_id
+                       d.nationality, s.actual_champion_driver_id,
+                       c.p_champion AS p_continued, c.extra_races,
+                       c.banked_points, c.form_strength
                 FROM season_driver_sim sds
                 JOIN drivers d ON d.driver_id = sds.driver_id
                 JOIN seasons s ON s.year = sds.year
-                WHERE sds.run_id = :run AND sds.year = :year AND sds.p_champion > 0
+                LEFT JOIN season_continuation_sim c
+                  ON c.run_id = sds.run_id AND c.year = sds.year
+                 AND c.driver_id = sds.driver_id
+                WHERE sds.run_id = :run AND sds.year = :year
+                  AND (sds.p_champion > 0 OR c.p_champion > 0)
                 ORDER BY sds.p_champion DESC
                 """
             ),
@@ -292,6 +307,13 @@ async def champion_odds(db: AsyncSession, year: int, run: RunInfo) -> list[Champ
         ChampionOdds(
             driver=_driver_ref(row),
             p_champion=row.p_champion,
+            # A full-length season has no remainder to race, so the continuation
+            # is degenerate rather than informative and is withheld.
+            p_champion_continued=(
+                row.p_continued if (row.extra_races or 0) > 0 else None
+            ),
+            banked_points=row.banked_points or 0.0,
+            form_strength=row.form_strength or 0.0,
             is_actual_champion=row.driver_id == row.actual_champion_driver_id,
         )
         for row in rows

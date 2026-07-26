@@ -16,7 +16,19 @@ import numpy as np
 _STREAM_NAMESPACE = 0x46312D3234  # "F1-24"
 
 
+#: Distinct namespace for the continuation model, so the two simulations draw
+#: from independent streams. Sharing one would make the continuation's numbers
+#: depend on how many draws the bootstrap happened to consume first.
+_CONTINUATION_NAMESPACE = 0x46312D434F  # "F1-CO"
+
+
 def season_generator(master_seed: int, year: int) -> np.random.Generator:
     """A generator unique to (master_seed, year) and independent of run order."""
     sequence = np.random.SeedSequence([_STREAM_NAMESPACE, master_seed, year])
+    return np.random.default_rng(sequence)
+
+
+def continuation_generator(master_seed: int, year: int) -> np.random.Generator:
+    """The same guarantee for the season-continuation model."""
+    sequence = np.random.SeedSequence([_CONTINUATION_NAMESPACE, master_seed, year])
     return np.random.default_rng(sequence)

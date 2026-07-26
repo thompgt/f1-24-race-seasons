@@ -27,6 +27,7 @@ from app.core.database import Base  # noqa: E402
 from app.models import sim as _sim  # noqa: E402,F401  (registers tables)
 from app.models import source as _source  # noqa: E402,F401
 from app.services.event_source import list_seasons, load_season_events  # noqa: E402
+from app.services.form_source import load_season_form  # noqa: E402
 from app.sim.bootstrap import (  # noqa: E402
     DEFAULT_ITERATIONS,
     DEFAULT_TARGET_RACES,
@@ -35,6 +36,11 @@ from app.sim.bootstrap import (  # noqa: E402
     summarise,
 )
 from app.sim.career import Summary, aggregate_group, encode_draws, probability_at_least  # noqa: E402
+from app.sim.continuation import (  # noqa: E402
+    champion_probability as continuation_champion_probability,
+    simulate_continuation,
+)
+from app.sim.rng import continuation_generator  # noqa: E402
 
 logger = logging.getLogger("run_simulations")
 
@@ -214,10 +220,52 @@ def run_season(
                         (year, column)
                     )
 
+    insert_many(conn, "season_continuation_sim", _continuation_rows(conn, run_id, year, args))
     insert_many(conn, "season_driver_sim", driver_rows)
     insert_many(conn, "season_constructor_sim", constructor_rows)
     insert_many(conn, "sim_iterations", blob_rows)
     return len(driver_rows), len(constructor_rows)
+
+
+def _continuation_rows(conn, run_id: int, year: int, args) -> list[dict]:
+    """Race out the remainder of a season from end-of-year form.
+
+    Deliberately a separate pass over the same season rather than a branch
+    inside the bootstrap: the two models share no state, answer different
+    questions, and are seeded from independent streams.
+    """
+    form = load_season_form(conn, year)
+    rng = continuation_generator(args.seed, year)
+    result = simulate_continuation(
+        form,
+        rng=rng,
+        n_iterations=args.iterations,
+        target_races=args.target_races,
+    )
+    odds = continuation_champion_probability(
+        result["points"], result["wins"], result["podiums"]
+    )
+    stats = summarise(result["points"])
+    strength = np.atleast_2d(form.strength).mean(axis=0)
+
+    return [
+        {
+            "run_id": run_id,
+            "year": year,
+            "driver_id": int(driver_id),
+            "extra_races": int(result["extra_races"][0]),
+            "banked_points": float(form.points[i]),
+            "form_strength": float(strength[i]),
+            "points_mean": float(stats["mean"][i]),
+            "points_median": float(stats["median"][i]),
+            "points_p2_5": float(stats["p2_5"][i]),
+            "points_p97_5": float(stats["p97_5"][i]),
+            "wins_mean": float(result["wins"].mean(axis=0)[i]),
+            "podiums_mean": float(result["podiums"].mean(axis=0)[i]),
+            "p_champion": float(odds[i]),
+        }
+        for i, driver_id in enumerate(form.driver_ids)
+    ]
 
 
 def _actual_positions(conn, year: int) -> dict[int, int]:
@@ -499,6 +547,7 @@ def main() -> int:
         if args.replace:
             for table in (
                 "sim_iterations", "season_driver_sim", "season_constructor_sim",
+                "season_continuation_sim",
                 "career_driver_sim", "group_sim", "sim_runs",
             ):
                 conn.execute(text(f"DELETE FROM {table}"))
