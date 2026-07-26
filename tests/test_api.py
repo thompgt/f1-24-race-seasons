@@ -101,3 +101,100 @@ def test_champion_odds_form_a_distribution():
 def test_unknown_season_returns_404():
     assert client.get("/api/seasons/1899").status_code == 404
     assert client.get("/api/seasons/1899/champion-odds").status_code == 404
+
+
+# --- Historical stats --------------------------------------------------------
+
+
+@requires_run
+def test_leaderboard_lifts_short_era_drivers():
+    """The correction, checked through the API.
+
+    Fangio sits outside the top ten on raw wins because he raced 7-9 race
+    seasons; normalised to 24 he belongs near the front.
+    """
+    board = client.get("/api/historical/leaders?metric=wins&limit=10").json()
+    rows = {row["label"]: row for row in board["rows"]}
+
+    fangio = rows["Juan Fangio"]
+    assert fangio["rank"] <= 5
+    assert fangio["rank_actual"] > 10
+    assert fangio["rank_delta"] > 0
+    assert fangio["actual"] == 24
+    assert fangio["sim"]["median"] > 60
+
+
+@requires_run
+def test_leaderboard_ranks_by_the_requested_basis():
+    actual = client.get("/api/historical/leaders?metric=wins&basis=actual&limit=5").json()
+    assert [r["label"] for r in actual["rows"]][:2] == ["Lewis Hamilton", "Michael Schumacher"]
+    assert actual["rows"] == sorted(actual["rows"], key=lambda r: -r["actual"])
+
+    simulated = client.get("/api/historical/leaders?metric=wins&basis=sim&limit=5").json()
+    assert simulated["rows"] != actual["rows"]
+
+
+@requires_run
+def test_rank_delta_is_omitted_without_a_real_baseline():
+    """Constructors' titles have no unadjusted counterpart in the source data."""
+    board = client.get(
+        "/api/historical/leaders?metric=championships&group_by=constructor&limit=5"
+    ).json()
+    assert all(row["rank_delta"] is None for row in board["rows"])
+
+
+@requires_run
+def test_group_totals_carry_real_actuals():
+    board = client.get("/api/historical/leaders?metric=wins&group_by=constructor&limit=5").json()
+    top = board["rows"][0]
+    assert top["label"] == "Ferrari"
+    assert top["actual"] > 200
+    assert top["sim"]["median"] > top["actual"]
+
+
+@requires_run
+def test_nationality_grouping_aggregates_drivers():
+    board = client.get(
+        "/api/historical/leaders?metric=wins&group_by=driver_nationality&limit=5"
+    ).json()
+    assert board["rows"][0]["label"] == "British"
+    assert board["rows"][0]["n_entities"] > 1
+
+
+@requires_run
+def test_the_year_range_restricts_the_field():
+    board = client.get(
+        "/api/historical/leaders?metric=wins&year_from=1950&year_to=1969&limit=5"
+    ).json()
+    labels = [row["label"] for row in board["rows"]]
+    assert "Juan Fangio" in labels
+    assert "Lewis Hamilton" not in labels
+
+    for row in board["rows"]:
+        assert row["sim"]["p2_5"] <= row["sim"]["median"] <= row["sim"]["p97_5"]
+
+
+@requires_run
+def test_min_races_excludes_one_off_entrants():
+    strict = client.get("/api/historical/leaders?metric=wins&min_races=100").json()
+    loose = client.get("/api/historical/leaders?metric=wins&min_races=1").json()
+    assert strict["total"] < loose["total"]
+
+
+@requires_run
+def test_the_year_range_is_rejected_for_group_totals():
+    response = client.get(
+        "/api/historical/leaders?group_by=constructor&year_from=1990&year_to=2000"
+    )
+    assert response.status_code == 422
+    assert "driver leaderboards only" in response.json()["detail"]
+
+
+@requires_run
+def test_an_inverted_year_range_is_rejected():
+    response = client.get("/api/historical/leaders?year_from=2000&year_to=1990")
+    assert response.status_code == 422
+
+
+def test_unknown_metric_is_rejected():
+    assert client.get("/api/historical/leaders?metric=fastest_pitstops").status_code == 422

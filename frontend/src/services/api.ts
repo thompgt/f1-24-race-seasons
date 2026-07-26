@@ -3,7 +3,14 @@
  * nothing else calls `fetch` directly.
  */
 
-import type { ChampionOdds, Health, SeasonDetail, SeasonSummary } from '../types'
+import type {
+  ChampionOdds,
+  Health,
+  LeaderBoard,
+  LeaderQuery,
+  SeasonDetail,
+  SeasonSummary,
+} from '../types'
 
 const BASE = '/api'
 
@@ -63,4 +70,8 @@ export function getSeason(year: number): Promise<SeasonDetail> {
 
 export function getChampionOdds(year: number): Promise<ChampionOdds[]> {
   return get<ChampionOdds[]>(`/seasons/${year}/champion-odds`)
+}
+
+export function getLeaders(query: LeaderQuery): Promise<LeaderBoard> {
+  return get<LeaderBoard>('/historical/leaders', { ...query })
 }

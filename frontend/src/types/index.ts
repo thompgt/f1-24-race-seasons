@@ -123,3 +123,47 @@ export type Metric = 'wins' | 'podiums' | 'poles' | 'points' | 'championships'
 
 /** Which of the three bases a figure is drawn from. */
 export type Basis = 'sim' | 'scaled' | 'actual'
+
+export type GroupBy =
+  | 'driver'
+  | 'constructor'
+  | 'driver_nationality'
+  | 'constructor_nationality'
+
+export interface LeaderRow {
+  rank: number
+  key: string
+  label: string
+  sublabel: string | null
+  actual: number
+  scaled: number
+  sim: SimStat
+  rank_actual: number | null
+  rank_delta: number | null
+  n_entities: number
+  seasons_active: number | null
+  first_year: number | null
+  last_year: number | null
+}
+
+export interface LeaderBoard {
+  metric: Metric
+  group_by: GroupBy
+  basis: Basis
+  total: number
+  min_races: number
+  year_from: number | null
+  year_to: number | null
+  run: RunInfo
+  rows: LeaderRow[]
+}
+
+export interface LeaderQuery {
+  metric: Metric
+  group_by: GroupBy
+  basis: Basis
+  min_races?: number
+  year_from?: number
+  year_to?: number
+  limit?: number
+}

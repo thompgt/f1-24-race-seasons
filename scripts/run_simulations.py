@@ -305,8 +305,73 @@ def write_careers(conn, run_id: int, retained: dict, args) -> int:
     return len(rows)
 
 
+def _actual_and_scaled_totals(conn, run_id: int) -> dict[tuple[str, int, str], tuple[float, float]]:
+    """Career actual and pro-rata totals per entity, keyed by (type, id, metric).
+
+    Groups need these to sit beside their simulated figures, and to have a real
+    baseline to measure rank movement against.
+    """
+    totals: dict[tuple[str, int, str], tuple[float, float]] = {}
+
+    for row in conn.execute(
+        text(
+            """
+            SELECT sds.driver_id AS id,
+                   SUM(sds.actual_wins) AS a_wins, SUM(sds.scaled_wins) AS s_wins,
+                   SUM(sds.actual_podiums) AS a_pod, SUM(sds.scaled_podiums) AS s_pod,
+                   SUM(sds.actual_poles) AS a_pol, SUM(sds.scaled_poles) AS s_pol,
+                   SUM(sds.actual_points_no_fl) AS a_pts,
+                   SUM(sds.scaled_points_no_fl) AS s_pts
+            FROM season_driver_sim sds
+            JOIN seasons se ON se.year = sds.year AND se.is_complete = 1
+            WHERE sds.run_id = :run GROUP BY sds.driver_id
+            """
+        ),
+        {"run": run_id},
+    ).all():
+        totals[("driver", int(row.id), "wins")] = (row.a_wins, row.s_wins)
+        totals[("driver", int(row.id), "podiums")] = (row.a_pod, row.s_pod)
+        totals[("driver", int(row.id), "poles")] = (row.a_pol, row.s_pol)
+        totals[("driver", int(row.id), "points")] = (row.a_pts, row.s_pts)
+        totals[("driver", int(row.id), "points_no_fl")] = (row.a_pts, row.s_pts)
+
+    for row in conn.execute(
+        text(
+            """
+            SELECT scs.constructor_id AS id,
+                   SUM(scs.actual_wins) AS a_wins, SUM(scs.scaled_wins) AS s_wins,
+                   SUM(scs.actual_podiums) AS a_pod, SUM(scs.scaled_podiums) AS s_pod,
+                   SUM(scs.actual_points) AS a_pts, SUM(scs.scaled_points) AS s_pts
+            FROM season_constructor_sim scs
+            JOIN seasons se ON se.year = scs.year AND se.is_complete = 1
+            WHERE scs.run_id = :run GROUP BY scs.constructor_id
+            """
+        ),
+        {"run": run_id},
+    ).all():
+        totals[("constructor", int(row.id), "wins")] = (row.a_wins, row.s_wins)
+        totals[("constructor", int(row.id), "podiums")] = (row.a_pod, row.s_pod)
+        totals[("constructor", int(row.id), "points")] = (row.a_pts, row.s_pts)
+        totals[("constructor", int(row.id), "points_no_fl")] = (row.a_pts, row.s_pts)
+
+    # Titles per driver, from the real record.
+    for row in conn.execute(
+        text(
+            """
+            SELECT actual_champion_driver_id AS id, COUNT(*) AS titles
+            FROM seasons WHERE actual_champion_driver_id IS NOT NULL
+            GROUP BY actual_champion_driver_id
+            """
+        )
+    ).all():
+        totals[("driver", int(row.id), "championships")] = (float(row.titles), float(row.titles))
+
+    return totals
+
+
 def write_groups(conn, run_id: int, retained: dict, args) -> int:
     """Aggregate careers by constructor and by nationality."""
+    entity_totals = _actual_and_scaled_totals(conn, run_id)
     driver_nationality = dict(
         conn.execute(text("SELECT driver_id, nationality FROM drivers")).all()
     )
@@ -320,18 +385,22 @@ def write_groups(conn, run_id: int, retained: dict, args) -> int:
     memberships: dict[str, dict[str, list]] = {dim: defaultdict(list) for dim in GROUP_DIMENSIONS}
     labels: dict[tuple[str, str], str] = {}
 
+    # Members carry their entity identity so actual totals can be looked up.
     for constructor_id, metrics in retained["constructor"].items():
         name, nationality = constructor_meta.get(constructor_id, (str(constructor_id), None))
-        memberships["constructor"][str(constructor_id)].append(metrics)
+        member = ("constructor", constructor_id, metrics)
+        memberships["constructor"][str(constructor_id)].append(member)
         labels[("constructor", str(constructor_id))] = name
         if nationality:
-            memberships["constructor_nationality"][nationality].append(metrics)
+            memberships["constructor_nationality"][nationality].append(member)
             labels[("constructor_nationality", nationality)] = nationality
 
     for driver_id, metrics in retained["driver"].items():
         nationality = driver_nationality.get(driver_id)
         if nationality:
-            memberships["driver_nationality"][nationality].append(metrics)
+            memberships["driver_nationality"][nationality].append(
+                ("driver", driver_id, metrics)
+            )
             labels[("driver_nationality", nationality)] = nationality
 
     rows = []
@@ -345,13 +414,19 @@ def write_groups(conn, run_id: int, retained: dict, args) -> int:
         for group_key, members in groups.items():
             for metric in metrics:
                 vectors = []
-                for member in members:
+                actual_total = 0.0
+                scaled_total = 0.0
+                for entity_type, entity_id, member in members:
                     if metric not in member:
                         continue
                     total = np.zeros(args.iterations, dtype=np.int64)
                     for _, vector in member[metric]:
                         total += vector.astype(np.int64)
                     vectors.append(total)
+
+                    actual, scaled = entity_totals.get((entity_type, entity_id, metric), (0.0, 0.0))
+                    actual_total += actual
+                    scaled_total += scaled
                 if not vectors:
                     continue
                 summary, _ = aggregate_group(vectors)
@@ -363,8 +438,8 @@ def write_groups(conn, run_id: int, retained: dict, args) -> int:
                         "metric": metric,
                         "group_label": labels[(dimension, group_key)],
                         "n_entities": len(members),
-                        "actual": 0.0,
-                        "scaled": 0.0,
+                        "actual": actual_total,
+                        "scaled": scaled_total,
                         "mean": summary.mean,
                         "median": summary.median,
                         "p2_5": summary.p2_5,

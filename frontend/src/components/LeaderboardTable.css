@@ -1,0 +1,79 @@
+.leaderboard {
+  width: 100%;
+  min-width: 720px;
+  font-size: 14px;
+}
+
+.leaderboard th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--axis);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.leaderboard td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+
+.leaderboard tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.leaderboard .num {
+  text-align: right;
+}
+
+.leaderboard .col-rank {
+  width: 40px;
+  text-align: right;
+}
+
+.col-move {
+  width: 58px;
+}
+
+.leaderboard .col-bar {
+  width: 140px;
+}
+
+.leader-name {
+  font-weight: 500;
+}
+
+.leader-sub,
+.leader-was {
+  margin-left: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/*
+ * Movement uses the arrow glyph as its primary channel; colour reinforces it.
+ * Both directions therefore stay legible in greyscale and forced-colors mode.
+ */
+.delta {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.delta-up {
+  color: var(--delta-up);
+}
+
+.delta-down {
+  color: var(--status-critical);
+}
+
+@media (max-width: 700px) {
+  .leader-sub {
+    display: none;
+  }
+}
