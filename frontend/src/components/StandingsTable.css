@@ -1,0 +1,155 @@
+.standings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 10px;
+}
+
+/* Filters sit in one row above the table. */
+.metric-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+
+.metric-tabs button {
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.metric-tabs button:hover {
+  color: var(--text-primary);
+}
+
+.metric-tabs button.active {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.standings-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.key {
+  display: inline-block;
+  margin-left: 10px;
+}
+
+.key-median {
+  width: 2px;
+  height: 11px;
+  background: var(--series-sim);
+  transform: translateY(2px);
+}
+
+.key-range {
+  width: 16px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--series-sim-soft);
+}
+
+.key-scaled {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid var(--text-muted);
+}
+
+.standings-table {
+  width: 100%;
+  min-width: 780px;
+  font-size: 14px;
+}
+
+.standings-table th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--axis);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.standings-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+
+.standings-table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.standings-table .num {
+  text-align: right;
+}
+
+.col-rank {
+  width: 34px;
+  text-align: right;
+}
+
+.col-bar {
+  width: 130px;
+}
+
+.driver-name {
+  font-weight: 500;
+}
+
+.is-champion .driver-name {
+  color: var(--series-sim);
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-champion {
+  background: var(--series-sim-soft);
+  color: var(--series-sim);
+}
+
+:root[data-theme='dark'] .badge-champion {
+  color: #ffffff;
+}
+
+.badge-part {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.title-odds {
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .col-team {
+    display: none;
+  }
+}

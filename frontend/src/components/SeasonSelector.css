@@ -1,0 +1,56 @@
+.season-selector {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.season-selector ul {
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.season-selector button {
+  position: relative;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.season-selector button:hover {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.season-selector button.active {
+  background: var(--series-sim);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Secondary encoding: the dot marks a changed title, never colour alone. */
+.marker {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--series-actual);
+}
+
+.marker-partial {
+  top: auto;
+  bottom: 3px;
+  background: var(--text-muted);
+}
+
+.season-selector button.active .marker {
+  background: #ffffff;
+}

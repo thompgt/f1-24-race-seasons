@@ -3,17 +3,19 @@
  * nothing else calls `fetch` directly.
  */
 
-import type { Health } from '../types'
+import type { ChampionOdds, Health, SeasonDetail, SeasonSummary } from '../types'
 
 const BASE = '/api'
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  // Declared explicitly rather than as a constructor parameter property, which
+  // the project's erasableSyntaxOnly setting disallows.
+  readonly status: number
+
+  constructor(message: string, status: number) {
     super(message)
     this.name = 'ApiError'
+    this.status = status
   }
 }
 
@@ -49,4 +51,16 @@ async function get<T>(
 
 export function getHealth(): Promise<Health> {
   return get<Health>('/health')
+}
+
+export function getSeasons(): Promise<SeasonSummary[]> {
+  return get<SeasonSummary[]>('/seasons')
+}
+
+export function getSeason(year: number): Promise<SeasonDetail> {
+  return get<SeasonDetail>(`/seasons/${year}`)
+}
+
+export function getChampionOdds(year: number): Promise<ChampionOdds[]> {
+  return get<ChampionOdds[]>(`/seasons/${year}/champion-odds`)
 }

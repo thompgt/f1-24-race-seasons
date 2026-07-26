@@ -1,0 +1,86 @@
+.odds {
+  padding: 16px 18px;
+  margin: 20px 0;
+}
+
+.odds h2 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.odds-note {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.odds ul {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.odds li {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr 52px;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.odds-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.odds-actual {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.odds-track {
+  height: 8px;
+  background: var(--surface-sunken);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.odds-fill {
+  display: block;
+  height: 100%;
+  background: var(--series-sim);
+  border-radius: 4px;
+}
+
+/*
+ * The real champion's bar takes the second categorical slot, so "what happened"
+ * and "what the simulation prefers" are distinguishable at a glance. The text
+ * label carries the same information, so hue is never the only channel.
+ */
+.odds-fill.is-actual {
+  background: var(--series-actual);
+}
+
+.odds-value {
+  text-align: right;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+  .odds li {
+    grid-template-columns: 1fr 44px;
+  }
+
+  .odds-track {
+    grid-column: 1 / -1;
+  }
+}

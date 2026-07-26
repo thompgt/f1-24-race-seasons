@@ -1,0 +1,17 @@
+.simstat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.simstat-median {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The interval is context, so it recedes — but it is never hidden. */
+.simstat-ci {
+  font-size: 12px;
+  color: var(--text-muted);
+}

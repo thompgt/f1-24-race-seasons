@@ -1,0 +1,46 @@
+.cbar {
+  min-width: 96px;
+  padding: 4px 0;
+}
+
+.cbar-track {
+  position: relative;
+  height: 12px;
+  background: var(--surface-sunken);
+  border-radius: 3px;
+}
+
+/* The 95% interval. Thin mark, rounded ends. */
+.cbar-range {
+  position: absolute;
+  top: 3px;
+  height: 6px;
+  background: var(--series-sim-soft);
+  border-radius: 3px;
+}
+
+.cbar-median {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  background: var(--series-sim);
+  border-radius: 1px;
+}
+
+/*
+ * The pro-rata reference. Deliberately not a third hue: it is the same quantity
+ * as the median under a different estimator, so it reads as an annotation on the
+ * simulated mark rather than as a competing series.
+ */
+.cbar-scaled {
+  position: absolute;
+  top: 1px;
+  width: 0;
+  height: 0;
+  margin-left: -3px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid var(--text-muted);
+}

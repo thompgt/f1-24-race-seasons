@@ -1,0 +1,58 @@
+.season-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 24px 0 8px;
+}
+
+.season-header h1 {
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.season-sub {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.badge-progress {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.season-facts {
+  display: flex;
+  gap: 28px;
+  margin: 0;
+}
+
+.season-facts dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.season-facts dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.season-excluded {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .season-facts {
+    gap: 18px;
+  }
+}
